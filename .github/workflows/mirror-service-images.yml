@@ -59,10 +59,14 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   mirror:
+    # `packages: write` is scoped to this job: it is the only one that pushes
+    # to GHCR.
+    permissions:
+      contents: read
+      packages: write
     # Never run on forks: they lack both the secrets and write access to the
     # apache GHCR namespace, so a scheduled run there would only ever fail.
     if: github.repository == 'apache/superset'

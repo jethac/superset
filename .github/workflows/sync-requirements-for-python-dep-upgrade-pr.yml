@@ -5,11 +5,15 @@ on:
     types: [opened, synchronize]
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
   sync-python-dep-requirements:
+    # `contents: write` is scoped to this job: the checkout persists
+    # credentials so the synced requirements can be pushed back to the
+    # Dependabot branch.
+    permissions:
+      contents: write
     # This action is limited for (1) PRs authored by Dependabot and (2) upstream repo due to write back to remote
     if: github.repository == 'apache/superset' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-26.04
