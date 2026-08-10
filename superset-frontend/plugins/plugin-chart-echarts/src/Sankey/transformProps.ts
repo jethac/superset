@@ -41,7 +41,7 @@ export default function transformProps(
   const refs: Refs = {};
   const { formData, height, hooks, queriesData, width, theme } = chartProps;
   const { onLegendStateChanged } = hooks;
-  const { colorScheme, metric, source, target, sliceId } = formData;
+  const { colorScheme, metric, source, target, colorBy, sliceId } = formData;
   const { data } = queriesData[0];
   const colorFn = CategoricalColorNamespace.getScale(colorScheme);
   const metricLabel = getMetricLabel(metric);
@@ -50,12 +50,27 @@ export default function transformProps(
 
   const links: Link[] = [];
   const set = new Set<string>();
+  // color keys seen per node; a node seen with more than one key is ambiguous
+  // and falls back to being colored by its name
+  const colorKeys = new Map<string, Set<string>>();
+  const colorByLabel = colorBy ? getColumnLabel(colorBy) : undefined;
   data.forEach(datum => {
     const sourceName = String(datum[getColumnLabel(source)]);
     const targetName = String(datum[getColumnLabel(target)]);
     const value = datum[metricLabel] as number;
     set.add(sourceName);
     set.add(targetName);
+    if (colorByLabel !== undefined) {
+      const colorKey = String(datum[colorByLabel]);
+      [sourceName, targetName].forEach(nodeName => {
+        const keys = colorKeys.get(nodeName);
+        if (keys) {
+          keys.add(colorKey);
+        } else {
+          colorKeys.set(nodeName, new Set([colorKey]));
+        }
+      });
+    }
     links.push({
       source: sourceName,
       target: targetName,
@@ -63,12 +78,17 @@ export default function transformProps(
     });
   });
 
+  const getColorKey = (nodeName: string): string => {
+    const keys = colorKeys.get(nodeName);
+    return keys?.size === 1 ? keys.values().next().value! : nodeName;
+  };
+
   const seriesData: NonNullable<SankeySeriesOption['data']> = Array.from(
     set,
   ).map(name => ({
     name,
     itemStyle: {
-      color: colorFn(name, sliceId),
+      color: colorFn(getColorKey(name), sliceId),
     },
     label: {
       color: theme.colorText,
