@@ -20,6 +20,7 @@
 import { Page, Locator } from '@playwright/test';
 import { TIMEOUT } from '../utils/constants';
 import { AgGrid } from '../components/core/AgGrid';
+import { waitForPut } from '../helpers/api/intercepts';
 
 /**
  * Explore Page object
@@ -36,7 +37,17 @@ export class ExplorePage {
     EXPAND_DATA_PANEL: '[aria-label="Expand data panel"]',
     RESULTS_TAB: '[data-node-key="results"]',
     ACTIVE_TABPANE: '.ant-tabs-content-active',
+    ACTIONS_TRIGGER: '[data-test="actions-trigger"]',
+    METADATA_BAR: '[data-test="metadata-bar"]',
+    SAVE_BUTTON: '[data-test="query-save-button"]',
+    SAVE_MODAL_BODY: '[data-test="save-modal-body"]',
+    SAVE_MODAL_SAVE_BUTTON: '[data-test="btn-modal-save"]',
+    SUBMENU_TITLE: '.ant-dropdown-menu-submenu-title',
+    SUBMENU_POPUP:
+      '.ant-dropdown-menu-submenu-popup:not(.ant-dropdown-menu-submenu-hidden)',
   } as const;
+
+  private static readonly DASHBOARDS_SUBMENU_LABEL = 'On dashboards';
 
   constructor(page: Page) {
     this.page = page;
@@ -51,6 +62,91 @@ export class ExplorePage {
   async goto(chartId: number, options?: { timeout?: number }): Promise<void> {
     await this.page.goto(`explore/?slice_id=${chartId}`);
     await this.waitForPageLoad(options);
+  }
+
+  /**
+   * Gets the metadata bar locator (chart header summary items).
+   *
+   * @returns Locator for the metadata bar
+   */
+  getMetadataBar(): Locator {
+    return this.page.locator(ExplorePage.SELECTORS.METADATA_BAR);
+  }
+
+  /**
+   * Opens the chart's additional actions dropdown.
+   */
+  async openActionsMenu(): Promise<void> {
+    await this.page.locator(ExplorePage.SELECTORS.ACTIONS_TRIGGER).click();
+  }
+
+  /**
+   * Closes the chart's additional actions dropdown, including any open submenu.
+   */
+  async closeActionsMenu(): Promise<void> {
+    const popup = this.page
+      .locator(ExplorePage.SELECTORS.SUBMENU_POPUP)
+      .first();
+    await this.page.keyboard.press('Escape');
+    if (await popup.isVisible()) {
+      // Escape only dismisses the search input in some Ant Design versions;
+      // toggling the trigger closes the dropdown and its submenu.
+      await this.page.locator(ExplorePage.SELECTORS.ACTIONS_TRIGGER).click();
+    }
+    await popup.waitFor({
+      state: 'hidden',
+      timeout: TIMEOUT.UI_TRANSITION,
+    });
+  }
+
+  /**
+   * Opens the actions dropdown and hovers the "On dashboards" submenu.
+   *
+   * @returns Locator for the submenu popup listing the chart's dashboards
+   */
+  async openDashboardsSubmenu(): Promise<Locator> {
+    await this.openActionsMenu();
+    await this.page
+      .locator(ExplorePage.SELECTORS.SUBMENU_TITLE)
+      .filter({ hasText: ExplorePage.DASHBOARDS_SUBMENU_LABEL })
+      .hover();
+    const popup = this.page.locator(ExplorePage.SELECTORS.SUBMENU_POPUP);
+    await popup.waitFor({ state: 'visible', timeout: TIMEOUT.FORM_LOAD });
+    return popup;
+  }
+
+  /**
+   * Saves the current chart, overwriting it and adding it to a dashboard
+   * through the save modal.
+   *
+   * @param dashboardName - Title of an existing dashboard to add the chart to
+   */
+  async saveChartToDashboard(dashboardName: string): Promise<void> {
+    const saveButton = this.page.locator(ExplorePage.SELECTORS.SAVE_BUTTON);
+    await saveButton.click();
+
+    const modal = this.page.locator(ExplorePage.SELECTORS.SAVE_MODAL_BODY);
+    await modal.waitFor({ state: 'visible', timeout: TIMEOUT.FORM_LOAD });
+
+    const dashboardSelect = this.page.getByRole('combobox', {
+      name: /select a dashboard/i,
+    });
+    await dashboardSelect.click();
+    await this.page.keyboard.type(dashboardName);
+    await this.page
+      .locator(`.ant-select-item-option[title="${dashboardName}"]`)
+      .click();
+
+    const chartSaved = waitForPut(this.page, /\/api\/v1\/chart\/\d+$/, {
+      timeout: TIMEOUT.API_RESPONSE,
+    });
+    await this.page
+      .locator(ExplorePage.SELECTORS.SAVE_MODAL_SAVE_BUTTON)
+      .click();
+    await chartSaved;
+
+    await modal.waitFor({ state: 'hidden', timeout: TIMEOUT.FORM_LOAD });
+    await this.waitForPageLoad();
   }
 
   /**
