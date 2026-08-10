@@ -52,6 +52,28 @@ async function writeToGoogleSheet(data, range, headers, append = false) {
   await sheets.spreadsheets.values[method](request);
 }
 
+// oxlint plugin names that differ from the ESLint plugin the rule came from.
+const OXLINT_PLUGIN_ALIASES = { typescript: '@typescript-eslint' };
+
+// oxlint reports rule IDs as `plugin(rule)`, while ESLint reports `plugin/rule`
+// with core rules unprefixed. The metrics sheet is keyed by rule ID, so codes
+// are converted to the ESLint spelling to keep one series per rule across the
+// ESLint to oxlint migration.
+function normaliseRuleId(code) {
+  const match = code?.match(/^([\w-]+)\(([^)]+)\)$/);
+  if (!match) {
+    return code || 'unknown';
+  }
+
+  const [, rawPlugin, rule] = match;
+  const plugin = rawPlugin.replace(/^eslint-plugin-/, '');
+  if (plugin === 'eslint') {
+    return rule;
+  }
+
+  return `${OXLINT_PLUGIN_ALIASES[plugin] || plugin}/${rule}`;
+}
+
 // Run OXC and get JSON output
 async function runOxlintAndProcess() {
   const enrichedRules = {
@@ -101,17 +123,7 @@ async function runOxlintAndProcess() {
     // OXC JSON format has diagnostics array
     if (results.diagnostics && Array.isArray(results.diagnostics)) {
       results.diagnostics.forEach(diagnostic => {
-        // Extract rule ID from code like "eslint(no-unused-vars)" or "eslint-plugin-unicorn(no-new-array)"
-        const codeMatch = diagnostic.code?.match(
-          /^(?:eslint(?:-plugin-(\w+))?\()([^)]+)\)$/,
-        );
-        let ruleId = diagnostic.code || 'unknown';
-
-        if (codeMatch) {
-          const plugin = codeMatch[1];
-          const rule = codeMatch[2];
-          ruleId = plugin ? `${plugin}/${rule}` : rule;
-        }
+        const ruleId = normaliseRuleId(diagnostic.code);
 
         const file = diagnostic.filename || 'unknown';
         const line = diagnostic.labels?.[0]?.span?.line || 0;
