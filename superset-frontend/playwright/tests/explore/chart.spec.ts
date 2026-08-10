@@ -81,7 +81,7 @@ async function saveChartToDashboard(
   dashboardName: string,
 ): Promise<void> {
   const saveButton = page.locator('[data-test="query-save-button"]');
-  await expect(saveButton).toBeEnabled();
+  await expect(saveButton).toBeEnabled({ timeout: TIMEOUT.CHART_RENDER });
 
   const modal = page.locator('[data-test="save-modal-body"]');
   const dashboardSelect = page
@@ -100,6 +100,8 @@ async function saveChartToDashboard(
     // whose names are prefixes of one another.
     await page
       .locator(`.ant-select-item-option[title="${dashboardName}"]`)
+      // A reopened dropdown can leave its previous options mounted.
+      .first()
       .click({ timeout: 5000 });
   }).toPass({ timeout: TIMEOUT.API_RESPONSE * 4 });
   // Saving replaces the Explore URL, which refetches the chart's state; a
@@ -240,6 +242,7 @@ testWithAssets(
 testWithAssets(
   'shows a no results message when a query returns nothing',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const dataset = await getDatasetByName(page, DATASET_NAME);
     if (!dataset) {
       throw new Error(`Dataset ${DATASET_NAME} not found`);

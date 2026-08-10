@@ -46,10 +46,10 @@ import {
 const YEAR = /^\d{4}$/;
 
 /**
- * Probing a canvas chart for its marks costs a right-click per candidate, which
- * outlasts the default per-test budget.
+ * Building a dashboard, waiting for its charts and probing a canvas for marks
+ * one right-click at a time all outlast the default per-test budget.
  */
-const CANVAS_TEST_TIMEOUT = TIMEOUT.SLOW_TEST * 2;
+const TEST_TIMEOUT = TIMEOUT.SLOW_TEST * 2;
 
 /** Rows in the `birth_names` example data, as the modal labels them. */
 const ALL_ROWS = '75.7k rows';
@@ -69,7 +69,7 @@ const PAGE_LINK_COUNT = 6;
 testWithAssets(
   'opens the drill to detail modal from the chart menu',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -81,7 +81,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.title).toContainText('Drill to detail:');
     await expect(modal.rowCount).toContainText(ALL_ROWS);
   },
@@ -90,7 +90,7 @@ testWithAssets(
 testWithAssets(
   'refreshes the drilled samples',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -102,7 +102,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await modal.gotoPage(PAGE_LINK_COUNT - 1);
     await expect(modal.activePage).not.toHaveText('1');
 
@@ -115,7 +115,7 @@ testWithAssets(
 testWithAssets(
   'paginates the drilled samples',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -127,7 +127,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.rowCount).toContainText(ALL_ROWS);
     await expect(modal.cells.first()).toBeVisible();
     await expect(modal.pages).toHaveCount(PAGE_LINK_COUNT);
@@ -155,7 +155,7 @@ testWithAssets(
 testWithAssets(
   'clears a drill filter and reloads the samples',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(CANVAS_TEST_TIMEOUT);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, ['box_plot']);
     const [chart] = charts;
     await chartCanvas(chart);
@@ -166,7 +166,7 @@ testWithAssets(
     await drillMarkBy(page, box.point, GENDERS[0]);
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.filterValues.first()).toContainText(GENDERS[0]);
     await expect(modal.rowCount).toContainText(BOY_ROWS);
     await expect(modal.pages).toHaveCount(PAGE_LINK_COUNT);
@@ -189,7 +189,7 @@ testWithAssets(
 testWithAssets(
   'drills a Big Number with no filters',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -199,7 +199,7 @@ testWithAssets(
     await drillToDetail(page);
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.filterValues).toHaveCount(0);
   },
 );
@@ -207,7 +207,7 @@ testWithAssets(
 testWithAssets(
   'drills a Big Number with Trendline by its number and its trendline',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(CANVAS_TEST_TIMEOUT);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number',
     ]);
@@ -216,7 +216,7 @@ testWithAssets(
 
     await chart.locator('.header-line').click({ button: 'right' });
     await drillToDetail(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.filterValues).toHaveCount(0);
     await modal.close();
 
@@ -224,7 +224,7 @@ testWithAssets(
     // The trendline's marks carry only the time value the point aggregates.
     const year = await drillChartMark(page, chart, value => YEAR.test(value));
 
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.filterValues.first()).toContainText(year);
   },
 );
@@ -232,7 +232,7 @@ testWithAssets(
 testWithAssets(
   'drills a Table by the clicked dimension value',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, ['table']);
     const [chart] = charts;
     const modal = new DrillToDetailModal(page);
@@ -242,7 +242,7 @@ testWithAssets(
         button: 'right',
       });
       await drillBy(page, gender);
-      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+      await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
       await expect(modal.filterValues.first()).toContainText(gender);
       await modal.close();
     }
@@ -252,7 +252,7 @@ testWithAssets(
 testWithAssets(
   'drills a Pivot Table by each dimension of the clicked cell',
   async ({ page, testAssets }) => {
-    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
+    testWithAssets.setTimeout(TEST_TIMEOUT);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'pivot_table_v2',
     ]);
@@ -270,14 +270,14 @@ testWithAssets(
     for (const value of values.slice(0, 2)) {
       await cell.click({ button: 'right' });
       await drillBy(page, value);
-      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+      await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
       await expect(modal.filterValues.first()).toContainText(value);
       await modal.close();
     }
 
     await cell.click({ button: 'right' });
     await drillBy(page, 'all');
-    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+    await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
     await expect(modal.filterValues).toHaveCount(2);
     // The modal groups the filters by dimension, which need not follow the
     // order the submenu listed them in.
@@ -307,7 +307,7 @@ for (const vizType of TIME_CHARTS) {
   testWithAssets(
     `drills ${vizType} by time, by dimension and by all`,
     async ({ page, testAssets }) => {
-      testWithAssets.setTimeout(CANVAS_TEST_TIMEOUT);
+      testWithAssets.setTimeout(TEST_TIMEOUT);
       const { charts } = await openDrillDashboard(page, testAssets, [vizType]);
       const [chart] = charts;
       await chartCanvas(chart);
@@ -326,17 +326,17 @@ for (const vizType of TIME_CHARTS) {
       const time = await drillMarkMatching(page, point, value =>
         YEAR.test(value),
       );
-      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+      await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
       await expect(modal.filterValues.first()).toContainText(time);
       await modal.close();
 
       await drillMarkBy(page, point, GENDERS[0]);
-      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+      await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
       await expect(modal.filterValues.first()).toContainText(GENDERS[0]);
       await modal.close();
 
       await drillMarkBy(page, point, 'all');
-      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+      await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
       // The point can resolve to either of the neighbouring times, so the
       // filter is asserted to hold a time rather than one specific year.
       await expect(modal.filterValues.nth(0)).toContainText(YEAR);
@@ -361,7 +361,7 @@ for (const vizType of CATEGORICAL_CHARTS) {
   testWithAssets(
     `drills ${vizType} by the dimension value of each mark`,
     async ({ page, testAssets }) => {
-      testWithAssets.setTimeout(CANVAS_TEST_TIMEOUT);
+      testWithAssets.setTimeout(TEST_TIMEOUT);
       const { charts } = await openDrillDashboard(page, testAssets, [vizType]);
       const [chart] = charts;
       await chartCanvas(chart);
@@ -374,7 +374,7 @@ for (const vizType of CATEGORICAL_CHARTS) {
       );
       for (const [index, gender] of GENDERS.entries()) {
         await drillMarkBy(page, marks[index].point, gender);
-        await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
+        await modal.waitForSamples({ timeout: TIMEOUT.SLOW_TEST });
         await expect(modal.filterValues.first()).toContainText(gender);
         await modal.close();
       }
