@@ -299,11 +299,30 @@ class ElasticSearchEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-metho
 
 
 class OpenDistroEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-method
-    """OpenDistro/OpenSearch SQL engine spec.
+    """OpenDistro/OpenSearch SQL engine spec."""
 
-    Note: Documentation is consolidated in ElasticSearchEngineSpec.
-    This spec exists for runtime support of the odelasticsearch driver.
-    """
+    metadata = {
+        "description": (
+            "OpenSearch is an open-source search and analytics engine, forked "
+            "from Elasticsearch. This spec queries it through the SQL plugin "
+            "that OpenSearch and Open Distro for Elasticsearch expose."
+        ),
+        "logo": "elasticsearch.png",
+        "homepage_url": "https://opensearch.org/",
+        "categories": [DatabaseCategory.SEARCH_NOSQL, DatabaseCategory.OPEN_SOURCE],
+        "pypi_packages": ["elasticsearch-dbapi[opendistro]"],
+        "connection_string": (
+            "odelasticsearch+https://{username}:{password}@{host}:{port}/"
+        ),
+        "default_port": 9200,
+        "sqlalchemy_docs_url": "https://github.com/preset-io/elasticsearch-dbapi",
+        "notes": (
+            "Queries are sent to the cluster's `_opendistro/_sql` endpoint, which "
+            "differs from the `_sql` endpoint served by Elasticsearch's own SQL "
+            "API. A cluster fronted by Amazon OpenSearch Service is reached on "
+            "port 443 instead of the self-hosted default of 9200."
+        ),
+    }
 
     time_groupby_inline = True
     allows_joins = False
