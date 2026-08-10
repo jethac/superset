@@ -32,7 +32,11 @@ from superset.databases.utils import (
     get_foreign_keys_metadata,
     get_indexes_metadata,
 )
-from superset.db_engine_specs.base import BaseEngineSpec, BasicParametersMixin
+from superset.db_engine_specs.base import (
+    BaseEngineSpec,
+    BasicParametersMixin,
+    DatabaseCategory,
+)
 from superset.sql.parse import Partition, SQLScript, Table
 from superset.superset_typing import ResultSetColumnType
 
@@ -64,6 +68,54 @@ class OdpsEngineSpec(BasicParametersMixin, OdpsBaseEngineSpec):
     engine = "odps"
     engine_name = "ODPS (MaxCompute)"
     default_driver = "odps"
+
+    metadata = {
+        "description": (
+            "Alibaba Cloud MaxCompute (formerly ODPS) is a serverless data "
+            "warehouse for batch processing of large datasets. Superset "
+            "connects through the SQLAlchemy dialect shipped with PyODPS."
+        ),
+        "homepage_url": "https://www.alibabacloud.com/product/maxcompute",
+        "docs_url": "https://pyodps.readthedocs.io/en/latest/",
+        "sqlalchemy_docs_url": (
+            "https://pyodps.readthedocs.io/en/latest/db-sqlalchemy.html"
+        ),
+        "categories": [
+            DatabaseCategory.CLOUD_DATA_WAREHOUSES,
+            DatabaseCategory.ANALYTICAL_DATABASES,
+            DatabaseCategory.PROPRIETARY,
+        ],
+        "pypi_packages": ["pyodps"],
+        "connection_string": (
+            "odps://{access_id}:{access_key}@{project}/?endpoint={endpoint}"
+        ),
+        "parameters": {
+            "access_id": "AccessKey ID of the Alibaba Cloud account",
+            "access_key": "AccessKey secret of the Alibaba Cloud account",
+            "project": "Name of the MaxCompute project",
+            "endpoint": (
+                "MaxCompute service endpoint for the project's region, "
+                "for example https://service.cn-hangzhou.maxcompute.aliyun.com/api"
+            ),
+        },
+        "connection_examples": [
+            {
+                "description": "MaxCompute project in the cn-hangzhou region",
+                "connection_string": (
+                    "odps://{access_id}:{access_key}@my_project/"
+                    "?endpoint=https://service.cn-hangzhou.maxcompute.aliyun.com/api"
+                ),
+            },
+        ],
+        "version_requirements": "PyODPS 0.10.0 or later for SQLAlchemy support.",
+        "notes": (
+            "The endpoint is a full HTTPS URL passed as a query argument rather "
+            "than a host and port. Listing MaxCompute objects can be slow; "
+            "PyODPS 0.12.0 and later accept `cache_names=true` (and an optional "
+            "`cache_seconds=<seconds>`) in the connection string to cache "
+            "object names."
+        ),
+    }
 
     @classmethod
     def get_table_metadata(

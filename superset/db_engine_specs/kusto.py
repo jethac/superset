@@ -211,9 +211,10 @@ class KustoSqlEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-method
 class KustoKqlEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-method
     """Azure Data Explorer engine spec using native KQL query language.
 
-    Note: Documentation is consolidated in KustoSqlEngineSpec (Azure Data Explorer).
     This spec exists for runtime support of the kustokql driver.
     """
+
+    metadata_documented_by = "KustoSqlEngineSpec"
 
     engine = "kustokql"
     engine_name = "Azure Data Explorer (KQL)"

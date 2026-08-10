@@ -21,9 +21,10 @@ from superset.db_engine_specs.postgres import PostgresEngineSpec
 class AuroraMySQLDataAPI(MySQLEngineSpec):
     """Amazon Aurora MySQL via the Data API.
 
-    Note: Documentation is in MySQLEngineSpec's compatible_databases section.
     This spec exists for runtime support of the auroradataapi driver.
     """
+
+    metadata_documented_by = "MySQLEngineSpec"
 
     engine = "mysql"
     default_driver = "auroradataapi"
@@ -40,9 +41,10 @@ class AuroraMySQLDataAPI(MySQLEngineSpec):
 class AuroraPostgresDataAPI(PostgresEngineSpec):
     """Amazon Aurora PostgreSQL via the Data API.
 
-    Note: Documentation is in PostgresEngineSpec's compatible_databases section.
     This spec exists for runtime support of the auroradataapi driver.
     """
+
+    metadata_documented_by = "PostgresEngineSpec"
 
     engine = "postgresql"
     default_driver = "auroradataapi"
@@ -64,6 +66,8 @@ class AuroraMySQLEngineSpec(MySQLEngineSpec):
     the aws_iam config in encrypted_extra.
     """
 
+    metadata_documented_by = "MySQLEngineSpec"
+
     engine = "mysql"
     engine_name = "Aurora MySQL"
     default_driver = "mysqldb"
@@ -76,6 +80,8 @@ class AuroraPostgresEngineSpec(PostgresEngineSpec):
     IAM authentication is handled by the parent PostgresEngineSpec via
     the aws_iam config in encrypted_extra.
     """
+
+    metadata_documented_by = "PostgresEngineSpec"
 
     engine = "postgresql"
     engine_name = "Aurora PostgreSQL"
