@@ -216,8 +216,8 @@ export async function openDrillDashboard(
   );
   const dashboardPage = new DashboardPage(page);
   await dashboardPage.gotoById(dashboardId);
-  await dashboardPage.waitForLoad();
-  await dashboardPage.waitForChartsToLoad({ timeout: TIMEOUT.CHART_RENDER });
+  await dashboardPage.waitForLoad({ timeout: TIMEOUT.CHART_RENDER });
+  await dashboardPage.waitForChartsToLoad({ timeout: TIMEOUT.SLOW_TEST });
   return {
     dashboardPage,
     charts: chartIds.map(chartId => dashboardPage.getChart(chartId)),
@@ -276,6 +276,9 @@ export interface Point {
   x: number;
   y: number;
 }
+
+/** Budget for one attempt at a right-click gesture on a canvas mark. */
+const MARK_GESTURE_TIMEOUT = 5000;
 
 /**
  * Finds viewport points that sit on a canvas chart's data marks.
@@ -347,8 +350,38 @@ export async function findChartMarkPoints(
       point.y >= 0 &&
       point.x <= window.innerWidth &&
       point.y <= window.innerHeight;
-    return (
-      [...clusters.values()]
+    const toViewport = (pick: { x: number; y: number }) => ({
+      x: rect.left + (pick.x + 0.5) * scaleX,
+      y: rect.top + (pick.y + 0.5) * scaleY,
+    });
+    // A series drawn as a stroke over a faded area fill — a trendline, an area
+    // chart — covers few pixels along its path and many below it, and only the
+    // path carries the data points. The topmost drawn pixel of a column is on
+    // that path whichever series it belongs to.
+    const columns = Math.max(perColor * 2, 8);
+    const edges: { x: number; y: number }[] = [];
+    for (let index = 0; index < columns; index += 1) {
+      const x = Math.floor((width * (index + 0.5)) / columns);
+      for (let y = Math.ceil(legendCutoff); y < height; y += 1) {
+        const offset = (y * width + x) * 4;
+        const [red, green, blue, alpha] = [
+          data[offset],
+          data[offset + 1],
+          data[offset + 2],
+          data[offset + 3],
+        ];
+        if (
+          alpha >= 60 &&
+          Math.max(red, green, blue) - Math.min(red, green, blue) >= 30
+        ) {
+          edges.push({ x, y: y + 1 });
+          break;
+        }
+      }
+    }
+    return [
+      ...edges.map(toViewport).filter(inViewport),
+      ...[...clusters.values()]
         .filter(points => points.length > 2)
         .sort((a, b) => b.length - a.length)
         // Antialiasing spreads a mark's colour over neighbouring buckets, so
@@ -357,16 +390,13 @@ export async function findChartMarkPoints(
         .flatMap(points =>
           // Spread the picks across the cluster: consecutive pixels belong to the
           // same mark, so neighbours add no coverage.
-          Array.from({ length: perColor }, (_unused, index) => {
-            const pick =
-              points[Math.floor((points.length * (index + 0.5)) / perColor)];
-            return {
-              x: rect.left + (pick.x + 0.5) * scaleX,
-              y: rect.top + (pick.y + 0.5) * scaleY,
-            };
-          }).filter(inViewport),
-        )
-    );
+          Array.from({ length: perColor }, (_unused, index) =>
+            toViewport(
+              points[Math.floor((points.length * (index + 0.5)) / perColor)],
+            ),
+          ).filter(inViewport),
+        ),
+    ];
   }, pointsPerColor);
 }
 
@@ -423,12 +453,16 @@ export interface DrillMark {
 /**
  * Right-clicks a viewport point, waiting for the chart context menu to open.
  */
-export async function rightClickAt(page: Page, point: Point): Promise<void> {
+export async function rightClickAt(
+  page: Page,
+  point: Point,
+  timeout: number = TIMEOUT.PAGE_LOAD,
+): Promise<void> {
   // ECharts resolves the pointed mark from its own pointer tracking, which a
   // click alone does not update.
   await page.mouse.move(point.x, point.y);
   await page.mouse.click(point.x, point.y, { button: 'right' });
-  await contextMenu(page).waitFor({ state: 'visible' });
+  await contextMenu(page).waitFor({ state: 'visible', timeout });
 }
 
 /**
@@ -447,23 +481,19 @@ export async function drillByValues(
 }
 
 /**
- * Searches a canvas chart for marks whose drill-by options satisfy the given
- * predicates, right-clicking candidate marks until each predicate has a match.
+ * Right-clicks a canvas chart's candidate marks, handing each mark's drill-by
+ * options to `visit` until it asks to stop or the candidates run out.
  *
- * A mark's own submenu is the only source of the values it can be drilled by,
- * so the search reports them rather than assuming what a coordinate holds.
- *
- * @param accepts - One predicate per mark wanted, each taking the dimension
- * values a mark offers
- * @returns One mark per predicate, in the order the predicates were given
- * @throws If any predicate goes unmatched
+ * @param visit - Called per mark whose options could be read; returns whether
+ * the probe is done. The context menu is open while it runs and is closed after
+ * it returns.
+ * @returns The options of every mark visited, one entry per mark
  */
-export async function findDrillMarks(
+async function probeChartMarks(
   page: Page,
   chart: Locator,
-  accepts: readonly ((values: string[]) => boolean)[],
-): Promise<DrillMark[]> {
-  const matches = new Map<number, DrillMark>();
+  visit: (point: Point, values: string[]) => Promise<boolean>,
+): Promise<string[]> {
   const probed = new Set<string>();
   const seen: string[] = [];
 
@@ -486,35 +516,65 @@ export async function findDrillMarks(
       if (!opened) {
         continue;
       }
+      let done = false;
       if (await drillToDetailByItem(page).isVisible()) {
         // A menu can close under the probe, which leaves its options unknown
-        // rather than failing the search: other candidates remain.
+        // rather than failing the probe: other candidates remain.
         const values = await drillByValues(page, 2000).catch(() => []);
         if (values.length > 0) {
           seen.push(values.join('/'));
-          accepts.forEach((accept, index) => {
-            if (!matches.has(index) && accept(values)) {
-              matches.set(index, { point, values });
-            }
-          });
+          done = await visit(point, values);
         }
       }
-      await closeContextMenu(page);
-      if (matches.size === accepts.length) {
-        return accepts.map((_accept, index) => {
-          const match = matches.get(index);
-          if (!match) {
-            throw new Error(`No mark matched predicate ${index}`);
-          }
-          return match;
-        });
+      if (done) {
+        // The menu is left as `visit` left it: a visit that drilled opened a
+        // modal, which the escape key would close.
+        return seen;
       }
+      await closeContextMenu(page);
     }
   }
-  throw new Error(
-    `Only ${matches.size} of ${accepts.length} drill marks found; ` +
-      `marks offered: ${seen.join(' | ') || 'none'}`,
-  );
+  return seen;
+}
+/**
+ * Searches a canvas chart for marks whose drill-by options satisfy the given
+ * predicates, right-clicking candidate marks until each predicate has a match.
+ *
+ * A mark's own submenu is the only source of the values it can be drilled by,
+ * so the search reports them rather than assuming what a coordinate holds.
+ *
+ * @param accepts - One predicate per mark wanted, each taking the dimension
+ * values a mark offers
+ * @returns One mark per predicate, in the order the predicates were given
+ * @throws If any predicate goes unmatched
+ */
+export async function findDrillMarks(
+  page: Page,
+  chart: Locator,
+  accepts: readonly ((values: string[]) => boolean)[],
+): Promise<DrillMark[]> {
+  const matches = new Map<number, DrillMark>();
+  const seen = await probeChartMarks(page, chart, async (point, values) => {
+    accepts.forEach((accept, index) => {
+      if (!matches.has(index) && accept(values)) {
+        matches.set(index, { point, values });
+      }
+    });
+    return matches.size === accepts.length;
+  });
+  if (matches.size < accepts.length) {
+    throw new Error(
+      `Only ${matches.size} of ${accepts.length} drill marks found; ` +
+        `marks offered: ${seen.join(' | ') || 'none'}`,
+    );
+  }
+  return accepts.map((_accept, index) => {
+    const match = matches.get(index);
+    if (!match) {
+      throw new Error(`No mark matched predicate ${index}`);
+    }
+    return match;
+  });
 }
 
 /**
@@ -522,14 +582,124 @@ export async function findDrillMarks(
  *
  * @param value - The dimension value to drill by, without the label prefix
  */
-export async function drillBy(page: Page, value: string): Promise<void> {
-  const items = await openDrillBySubmenu(page);
+export async function drillBy(
+  page: Page,
+  value: string,
+  timeout?: number,
+): Promise<void> {
+  const items = await openDrillBySubmenu(page, timeout);
   // The submenu stays open only while its parent is hovered, and moving the
   // pointer onto an item closes it, so the click is dispatched in place.
   await items
     .filter({ hasText: new RegExp(`^Drill to detail by ${value}$`) })
     .first()
     .dispatchEvent('click');
+}
+
+/**
+ * Drills a canvas chart by the first mark offering an accepted value, choosing
+ * it from the menu the search itself opened.
+ *
+ * A mark found by one right-click is not guaranteed to sit under the next one:
+ * a chart that re-renders or resizes between them moves its marks, and a small
+ * chart such as a trendline has little of it to hit. Drilling as part of the
+ * search removes the second right-click.
+ *
+ * @param accept - Chooses which of the values a mark offers to drill by
+ * @returns The value drilled by
+ * @throws If no mark offered an accepted value
+ */
+export async function drillChartMark(
+  page: Page,
+  chart: Locator,
+  accept: (value: string) => boolean,
+): Promise<string> {
+  const samplesModal = page
+    .locator('.ant-modal:has([data-test="close-drilltodetail-modal"])')
+    .first();
+  let drilled = '';
+  const seen = await probeChartMarks(page, chart, async (_point, values) => {
+    const value = values.find(accept);
+    if (!value) {
+      return false;
+    }
+    const opened = await drillBy(page, value, MARK_GESTURE_TIMEOUT)
+      .then(() =>
+        samplesModal.waitFor({
+          state: 'visible',
+          timeout: TIMEOUT.API_RESPONSE,
+        }),
+      )
+      .then(() => true)
+      // A menu that closed under the drill leaves the other candidates.
+      .catch(() => false);
+    if (opened) {
+      drilled = value;
+    }
+    return opened;
+  });
+  if (!drilled) {
+    throw new Error(
+      `No mark drilled; marks offered: ${seen.join(' | ') || 'none'}`,
+    );
+  }
+  return drilled;
+}
+
+/**
+ * Drills a canvas chart's mark by one of the values it offers, from the
+ * right-click to the samples modal.
+ *
+ * A right-click lands on a mark only while the chart keeps the layout it had
+ * when the mark was found, and a resize or a re-render moves it, which shows up
+ * as a context menu without drill-by options or as a dispatched click that
+ * opens nothing. The whole gesture is retried until the modal opens.
+ *
+ * @param accept - Chooses which of the values the mark offers to drill by
+ * @returns The value drilled by
+ */
+export async function drillMarkMatching(
+  page: Page,
+  point: Point,
+  accept: (value: string) => boolean,
+): Promise<string> {
+  const samplesModal = page
+    .locator('.ant-modal:has([data-test="close-drilltodetail-modal"])')
+    .first();
+  let drilled = '';
+  await expect(async () => {
+    await closeContextMenu(page);
+    await rightClickAt(page, point, MARK_GESTURE_TIMEOUT);
+    // Which data point a coordinate resolves to is ECharts' choice and can
+    // differ between right-clicks, so the value is read from the submenu of the
+    // attempt that drills rather than remembered from an earlier one.
+    const values = await drillByValues(page, MARK_GESTURE_TIMEOUT);
+    const value = values.find(accept);
+    if (!value) {
+      throw new Error(`No drill option accepted among ${values.join('/')}`);
+    }
+    await drillBy(page, value, MARK_GESTURE_TIMEOUT);
+    await samplesModal.waitFor({
+      state: 'visible',
+      timeout: TIMEOUT.API_RESPONSE,
+    });
+    drilled = value;
+  }).toPass({ timeout: TIMEOUT.SLOW_TEST, intervals: [0] });
+  return drilled;
+}
+
+/**
+ * Drills a canvas chart's mark by a known value, retried like
+ * {@link drillMarkMatching}.
+ *
+ * @param value - The dimension value to drill by, without the label prefix
+ */
+export async function drillMarkBy(
+  page: Page,
+  point: Point,
+  value: string,
+): Promise<void> {
+  await drillMarkMatching(page, point, offered => offered === value);
 }
 
 /** Chooses the unfiltered "Drill to detail" option of an open context menu. */

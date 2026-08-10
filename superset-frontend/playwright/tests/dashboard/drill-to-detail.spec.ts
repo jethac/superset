@@ -34,10 +34,12 @@ import {
   drillBy,
   drillToDetail,
   drillByValues,
+  drillChartMark,
+  drillMarkBy,
+  drillMarkMatching,
   findDrillMarks,
   GENDERS,
   openDrillDashboard,
-  rightClickAt,
 } from './drill-to-detail-helpers';
 
 /** A time value as the drill submenu formats a yearly time grain. */
@@ -161,8 +163,7 @@ testWithAssets(
     const [box] = await findDrillMarks(page, chart, [
       values => values.includes(GENDERS[0]),
     ]);
-    await rightClickAt(page, box.point);
-    await drillBy(page, GENDERS[0]);
+    await drillMarkBy(page, box.point, GENDERS[0]);
 
     const modal = new DrillToDetailModal(page);
     await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
@@ -221,12 +222,7 @@ testWithAssets(
 
     await chartCanvas(chart);
     // The trendline's marks carry only the time value the point aggregates.
-    const [mark] = await findDrillMarks(page, chart, [
-      values => values.some(value => YEAR.test(value)),
-    ]);
-    const year = mark.values.find(value => YEAR.test(value)) ?? '';
-    await rightClickAt(page, mark.point);
-    await drillBy(page, year);
+    const year = await drillChartMark(page, chart, value => YEAR.test(value));
 
     await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
     await expect(modal.filterValues.first()).toContainText(year);
@@ -318,31 +314,31 @@ for (const vizType of TIME_CHARTS) {
 
       // The mark's own submenu names the time value it holds; a hard-coded one
       // would only hold for a specific pixel offset.
-      const [{ point, values }] = await findDrillMarks(page, chart, [
+      const [{ point }] = await findDrillMarks(page, chart, [
         markValues =>
           markValues.length === 3 &&
           YEAR.test(markValues[0]) &&
           markValues[1] === GENDERS[0] &&
           markValues[2] === 'all',
       ]);
-      const [time] = values;
 
-      await rightClickAt(page, point);
-      await drillBy(page, time);
+      const time = await drillMarkMatching(page, point, value =>
+        YEAR.test(value),
+      );
       await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
       await expect(modal.filterValues.first()).toContainText(time);
       await modal.close();
 
-      await rightClickAt(page, point);
-      await drillBy(page, GENDERS[0]);
+      await drillMarkBy(page, point, GENDERS[0]);
       await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
       await expect(modal.filterValues.first()).toContainText(GENDERS[0]);
       await modal.close();
 
-      await rightClickAt(page, point);
-      await drillBy(page, 'all');
+      await drillMarkBy(page, point, 'all');
       await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
-      await expect(modal.filterValues.nth(0)).toContainText(time);
+      // The point can resolve to either of the neighbouring times, so the
+      // filter is asserted to hold a time rather than one specific year.
+      await expect(modal.filterValues.nth(0)).toContainText(YEAR);
       await expect(modal.filterValues.nth(1)).toContainText(GENDERS[0]);
     },
   );
@@ -376,8 +372,7 @@ for (const vizType of CATEGORICAL_CHARTS) {
         GENDERS.map(gender => (values: string[]) => values.includes(gender)),
       );
       for (const [index, gender] of GENDERS.entries()) {
-        await rightClickAt(page, marks[index].point);
-        await drillBy(page, gender);
+        await drillMarkBy(page, marks[index].point, gender);
         await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
         await expect(modal.filterValues.first()).toContainText(gender);
         await modal.close();
