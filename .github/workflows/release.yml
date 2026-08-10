@@ -10,28 +10,16 @@ permissions:
   contents: read
 
 jobs:
-  config:
-    runs-on: ubuntu-slim
-    outputs:
-      has-secrets: ${{ steps.check.outputs.has-secrets }}
-    steps:
-      - name: "Check for secrets"
-        id: check
-        shell: bash
-        run: |
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "has-secrets=1" >> "$GITHUB_OUTPUT"
-          fi
-
-        env:
-          NPM_TOKEN: ${{ (secrets.NPM_TOKEN != '' && secrets.GH_PERSONAL_ACCESS_TOKEN != '') || '' }}
   build:
-    needs: config
-    if: needs.config.outputs.has-secrets
+    # Publishing uses npm trusted publishing (OIDC), so there is no NPM_TOKEN to
+    # gate on. Restrict to the canonical repo: forks cannot mint a valid OIDC
+    # token for these packages and must not publish.
+    if: github.repository == 'apache/superset'
     name: Bump version and publish package(s)
     runs-on: ubuntu-26.04
     permissions:
       contents: write
+      id-token: write # required for npm trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,18 +79,16 @@ jobs:
         working-directory: ./superset-frontend
         run: npm run plugins:build
 
+      # No registry auth line is written. With an `_authToken` entry present, npm
+      # attempts token auth and skips the OIDC trusted-publishing exchange that
+      # lerna performs per package before publishing.
       - name: Configure npm and git
         if: env.HAS_TAGS
         run: |
           echo "@superset-ui:registry=https://registry.npmjs.org/" > .npmrc
           echo "registry=https://registry.npmjs.org/" >> .npmrc
-          echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" >> $HOME/.npmrc 2> /dev/null
-          npm whoami
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Bump version and publish package(s)
         if: env.HAS_TAGS
@@ -111,6 +97,5 @@ jobs:
           git tag -d `git tag | grep -E '^trigger-'`
           npm run plugins:release-from-tag
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
