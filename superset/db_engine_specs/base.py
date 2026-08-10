@@ -384,6 +384,14 @@ class BaseEngineSpec:  # pylint: disable=too-many-public-methods
     # See DBEngineSpecMetadata TypedDict for available fields.
     metadata: DBEngineSpecMetadata = {}
 
+    # Name of the engine spec class whose `metadata` documents this one. Set it
+    # on variant specs -- alternate drivers, legacy connectors, managed flavours
+    # of another engine -- that exist for runtime support only and whose
+    # documentation lives in another spec's `drivers` or `compatible_databases`
+    # entries. `lint_metadata.py` exempts these specs from the completeness
+    # check and verifies that the named spec exists and carries metadata.
+    metadata_documented_by: str | None = None
+
     # These attributes map the DB engine spec to one or more SQLAlchemy dialects/drivers;  # noqa: E501
     # see the ``supports_url`` and ``supports_backend`` methods below.
     engine = "base"  # str as defined in sqlalchemy.engine.engine

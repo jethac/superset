@@ -687,8 +687,29 @@ python superset/db_engine_specs/lint_metadata.py --markdown -o METADATA_STATUS.m
 The linter checks for:
 - **Required fields**: description, category, pypi_packages, connection_string
 - **Recommended fields**: logo, homepage_url, default_port
+- **Documentation deferral**: every spec either carries `metadata` or names the spec that documents it
 
 See [METADATA_STATUS.md](METADATA_STATUS.md) for the current completeness report.
+
+### Specs Documented by Another Spec
+
+Some specs exist only for runtime support of an alternate driver, a legacy
+connector, or a managed flavour of another engine, and are documented in
+another spec's `drivers` or `compatible_databases` entries. Those specs set
+`metadata_documented_by` instead of duplicating the metadata:
+
+```python
+class AuroraMySQLEngineSpec(MySQLEngineSpec):
+    metadata_documented_by = "MySQLEngineSpec"
+
+    engine = "mysql"
+    engine_name = "Aurora MySQL"
+```
+
+The linter exempts these specs from the completeness check, excludes them from
+the coverage statistics, and fails if the named spec does not exist or has no
+metadata of its own. A spec that sets both `metadata` and
+`metadata_documented_by` is an error.
 
 ### PostgreSQL-Compatible Databases
 

@@ -239,17 +239,19 @@ time_grain_expressions: dict[str | None, str] = {
 
 
 class DatabricksHiveEngineSpec(HiveEngineSpec):
-    """Databricks engine spec using Hive connector for Interactive Clusters."""
+    """Databricks engine spec using Hive connector for Interactive Clusters.
+
+    This spec exists for backwards compatibility with Interactive Cluster
+    connections.
+    """
+
+    metadata_documented_by = "DatabricksPythonConnectorEngineSpec"
 
     engine_name = "Databricks Interactive Cluster"
 
     engine = "databricks"
     drivers = {"pyhive": "Hive driver for Interactive Cluster"}
     default_driver = "pyhive"
-
-    # Note: Primary metadata is in DatabricksPythonConnectorEngineSpec which
-    # consolidates all Databricks connection methods. This spec exists for
-    # backwards compatibility with Interactive Cluster connections.
 
     _show_functions_column = "function"
 
@@ -290,17 +292,19 @@ class DatabricksBaseEngineSpec(BaseEngineSpec):
 
 
 class DatabricksODBCEngineSpec(DatabricksBaseEngineSpec):
-    """Databricks engine spec using ODBC driver for SQL Endpoints."""
+    """Databricks engine spec using ODBC driver for SQL Endpoints.
+
+    This spec exists for backwards compatibility with ODBC connections to
+    SQL Endpoints.
+    """
+
+    metadata_documented_by = "DatabricksPythonConnectorEngineSpec"
 
     engine_name = "Databricks SQL Endpoint"
 
     engine = "databricks"
     drivers = {"pyodbc": "ODBC driver for SQL endpoint"}
     default_driver = "pyodbc"
-
-    # Note: Primary metadata is in DatabricksPythonConnectorEngineSpec which
-    # consolidates all Databricks connection methods. This spec exists for
-    # backwards compatibility with ODBC connections to SQL Endpoints.
 
 
 class DatabricksDynamicBaseEngineSpec(BasicParametersMixin, DatabricksBaseEngineSpec):
@@ -610,7 +614,13 @@ class DatabricksDynamicBaseEngineSpec(BasicParametersMixin, DatabricksBaseEngine
 
 
 class DatabricksNativeEngineSpec(DatabricksDynamicBaseEngineSpec):
-    """Legacy Databricks connector using databricks-dbapi."""
+    """Legacy Databricks connector using databricks-dbapi.
+
+    This spec exists for backwards compatibility with legacy databricks-dbapi
+    connections.
+    """
+
+    metadata_documented_by = "DatabricksPythonConnectorEngineSpec"
 
     engine = "databricks"
     engine_name = "Databricks (legacy)"
@@ -624,9 +634,6 @@ class DatabricksNativeEngineSpec(DatabricksDynamicBaseEngineSpec):
         "databricks+connector://token:{access_token}@{host}:{port}/{database_name}"
     )
 
-    # Note: Primary metadata is in DatabricksPythonConnectorEngineSpec which
-    # consolidates all Databricks connection methods. This spec exists for
-    # backwards compatibility with legacy databricks-dbapi connections.
     context_key_mapping = {
         **DatabricksDynamicBaseEngineSpec.context_key_mapping,
         "database": "database",

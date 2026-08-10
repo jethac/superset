@@ -34,6 +34,15 @@ The script categorizes metadata fields into:
 - RECOMMENDED: Should be present for good documentation
 - OPTIONAL: Nice to have but not critical
 
+A spec that carries no metadata of its own must declare which spec documents it:
+
+    class AuroraMySQLEngineSpec(MySQLEngineSpec):
+        metadata_documented_by = "MySQLEngineSpec"
+
+Such specs are exempt from the completeness check and excluded from the
+coverage statistics, and the linter verifies that the named spec exists and
+carries metadata itself.
+
 Example output:
     === Metadata Completeness Report ===
 
@@ -145,6 +154,14 @@ class MetadataReport:
     completeness_score: float  # 0-100
     invalid_packages: list[str] | None = None  # PyPI packages that don't exist
     limitations: list[str] | None = None  # Known limitations
+    class_name: str = ""
+    documented_by: str | None = None  # Spec whose metadata documents this one
+    documented_by_error: str | None = None  # Why the declaration is invalid
+
+    @property
+    def is_exempt(self) -> bool:
+        """Whether the spec defers its documentation to another spec."""
+        return self.documented_by is not None and not self.has_metadata
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -156,12 +173,46 @@ class MetadataReport:
             "missing_recommended": sorted(self.missing_recommended),
             "missing_optional": sorted(self.missing_optional),
             "completeness_score": self.completeness_score,
+            "documented_by": self.documented_by,
+            "is_exempt": self.is_exempt,
         }
+        if self.documented_by_error is not None:
+            result["documented_by_error"] = self.documented_by_error
         if self.invalid_packages is not None:
             result["invalid_packages"] = self.invalid_packages
         if self.limitations is not None:
             result["limitations"] = self.limitations
         return result
+
+
+def validate_documentation_references(specs: list[dict[str, Any]]) -> None:
+    """
+    Check every `metadata_documented_by` declaration against the known specs.
+
+    Records the reason a declaration is invalid on the spec dict under
+    `documented_by_error`, leaving it unset when the declaration is valid.
+    """
+    with_metadata = {
+        spec["class_name"]
+        for spec in specs
+        if spec.get("metadata") and not spec["metadata"].get("_unparseable")
+    }
+    known = {spec["class_name"] for spec in specs}
+
+    for spec in specs:
+        target = spec.get("documented_by")
+        if target is None:
+            continue
+        if spec.get("metadata"):
+            spec["documented_by_error"] = (
+                "declares both `metadata` and `metadata_documented_by`"
+            )
+        elif target == spec["class_name"]:
+            spec["documented_by_error"] = "points at itself"
+        elif target not in known:
+            spec["documented_by_error"] = f"{target} is not an engine spec"
+        elif target not in with_metadata:
+            spec["documented_by_error"] = f"{target} has no metadata of its own"
 
 
 def analyze_spec(spec_data: dict[str, Any], check_pypi: bool = False) -> MetadataReport:
@@ -216,6 +267,9 @@ def analyze_spec(spec_data: dict[str, Any], check_pypi: bool = False) -> Metadat
         completeness_score=round(score, 1),
         invalid_packages=invalid_packages,
         limitations=limitations,
+        class_name=spec_data.get("class_name", ""),
+        documented_by=spec_data.get("documented_by"),
+        documented_by_error=spec_data.get("documented_by_error"),
     )
 
 
@@ -281,23 +335,24 @@ def get_all_engine_specs_ast() -> list[dict[str, Any]]:  # noqa: C901
                 if node.name.endswith("BaseEngineSpec") and not has_non_empty_engine:
                     continue
 
-                # Extract engine_name and metadata
+                # Extract engine_name, metadata and documentation deferral
                 engine_name = node.name
                 metadata = {}
+                documented_by = None
 
-                for item in node.body:
-                    if isinstance(item, ast.Assign):
-                        for target in item.targets:
-                            if isinstance(target, ast.Name):
-                                if target.id == "engine_name":
-                                    if isinstance(item.value, ast.Constant):
-                                        engine_name = item.value.value
-                                elif target.id == "metadata":
-                                    try:
-                                        metadata = _eval_ast_dict(item.value)
-                                    except Exception:
-                                        # Mark as unparseable
-                                        metadata = {"_unparseable": True}
+                for name, value in _class_attributes(node):
+                    if name == "engine_name":
+                        if isinstance(value, ast.Constant):
+                            engine_name = value.value
+                    elif name == "metadata_documented_by":
+                        if isinstance(value, ast.Constant):
+                            documented_by = value.value
+                    elif name == "metadata":
+                        try:
+                            metadata = _eval_ast_dict(value)
+                        except Exception:
+                            # Mark as unparseable
+                            metadata = {"_unparseable": True}
 
                 specs.append(
                     {
@@ -305,6 +360,7 @@ def get_all_engine_specs_ast() -> list[dict[str, Any]]:  # noqa: C901
                         "engine_name": engine_name,
                         "module": filename[:-3],  # Remove .py
                         "metadata": metadata,
+                        "documented_by": documented_by,
                     }
                 )
 
@@ -312,6 +368,24 @@ def get_all_engine_specs_ast() -> list[dict[str, Any]]:  # noqa: C901
             print(f"Warning: Could not parse {filename}: {e}", file=sys.stderr)
 
     return sorted(specs, key=lambda s: s["engine_name"])
+
+
+def _class_attributes(node: Any) -> list[tuple[str, Any]]:
+    """Yield (name, value node) for the plain and annotated class attributes."""
+    import ast
+
+    attributes = []
+    for item in node.body:
+        if isinstance(item, ast.AnnAssign):
+            if isinstance(item.target, ast.Name) and item.value is not None:
+                attributes.append((item.target.id, item.value))
+        elif isinstance(item, ast.Assign):
+            attributes.extend(
+                (target.id, item.value)
+                for target in item.targets
+                if isinstance(target, ast.Name)
+            )
+    return attributes
 
 
 def _eval_ast_dict(node: Any) -> dict[str, Any]:
@@ -389,26 +463,33 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
     print("METADATA COMPLETENESS REPORT")
     print("=" * 60 + "\n")
 
-    # Summary statistics
-    total = len(reports)
-    with_metadata = sum(1 for r in reports if r.has_metadata)
-    fully_complete = sum(1 for r in reports if not r.missing_required)
-    avg_score = sum(r.completeness_score for r in reports) / total if total else 0
+    # Specs that defer their documentation to another spec are excluded from
+    # the statistics; they are listed separately below.
+    scored = [r for r in reports if not r.is_exempt]
+    exempt = [r for r in reports if r.is_exempt]
+    bad_refs = [r for r in reports if r.documented_by_error]
 
-    print(f"Total engine specs:     {total}")
-    print(f"With metadata:          {with_metadata} ({with_metadata * 100 // total}%)")
+    # Summary statistics
+    total = len(scored)
+    with_metadata = sum(1 for r in scored if r.has_metadata)
+    fully_complete = sum(1 for r in scored if not r.missing_required)
+    avg_score = sum(r.completeness_score for r in scored) / total if total else 0
+
+    print(f"Documented engine specs: {total}")
+    print(f"With metadata:           {with_metadata} ({with_metadata * 100 // total}%)")
     print(
-        f"All required fields:    {fully_complete} ({fully_complete * 100 // total}%)"
+        f"All required fields:     {fully_complete} ({fully_complete * 100 // total}%)"
     )
-    print(f"Average completeness:   {avg_score:.1f}%")
+    print(f"Average completeness:    {avg_score:.1f}%")
+    print(f"Documented elsewhere:    {len(exempt)} (exempt)")
     print()
 
     # Group by completeness
     complete = [
-        r for r in reports if not r.missing_required and not r.missing_recommended
+        r for r in scored if not r.missing_required and not r.missing_recommended
     ]
-    needs_work = [r for r in reports if r.missing_required or r.missing_recommended]
-    no_metadata = [r for r in reports if not r.has_metadata]
+    needs_work = [r for r in scored if r.missing_required or r.missing_recommended]
+    no_metadata = [r for r in scored if not r.has_metadata]
 
     if complete:
         print(f"\n✅ COMPLETE ({len(complete)} specs - all required & recommended):")
@@ -438,9 +519,25 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
         print("-" * 50)
         for r in no_metadata:
             print(f"  {r.engine_name} ({r.module}.py)")
+            print(
+                "      └─ add `metadata`, or `metadata_documented_by` naming "
+                "the spec that documents it"
+            )
+
+    if exempt:
+        print(f"\n➡️  DOCUMENTED ELSEWHERE ({len(exempt)} specs):")
+        print("-" * 50)
+        for r in sorted(exempt, key=lambda x: x.engine_name):
+            print(f"  {r.engine_name:30} → {r.documented_by}")
+
+    if bad_refs:
+        print(f"\n❌ INVALID `metadata_documented_by` ({len(bad_refs)} specs):")
+        print("-" * 50)
+        for r in bad_refs:
+            print(f"  {r.class_name} ({r.module}.py): {r.documented_by_error}")
 
     # Show invalid PyPI packages
-    invalid_pypi = [r for r in reports if r.invalid_packages]
+    invalid_pypi = [r for r in scored if r.invalid_packages]
     if invalid_pypi:
         print(f"\n📦 INVALID PyPI PACKAGES ({len(invalid_pypi)} specs):")
         print("-" * 50)
@@ -456,7 +553,7 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
     all_fields = {**REQUIRED_FIELDS, **RECOMMENDED_FIELDS, **OPTIONAL_FIELDS}
     field_counts: dict[str, int] = dict.fromkeys(all_fields, 0)
 
-    for r in reports:
+    for r in scored:
         for field in r.present_fields:
             if field in field_counts:
                 field_counts[field] += 1
@@ -516,19 +613,23 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
         "",
     ]
 
-    total = len(reports)
-    with_metadata = sum(1 for r in reports if r.has_metadata)
-    all_required = sum(1 for r in reports if not r.missing_required)
-    avg_score = sum(r.completeness_score for r in reports) / total if total else 0
+    scored = [r for r in reports if not r.is_exempt]
+    exempt = [r for r in reports if r.is_exempt]
+
+    total = len(scored)
+    with_metadata = sum(1 for r in scored if r.has_metadata)
+    all_required = sum(1 for r in scored if not r.missing_required)
+    avg_score = sum(r.completeness_score for r in scored) / total if total else 0
 
     pct_meta = with_metadata * 100 // total
     pct_req = all_required * 100 // total
     lines.extend(
         [
-            f"- **Total engine specs:** {total}",
+            f"- **Documented engine specs:** {total}",
             f"- **With metadata:** {with_metadata} ({pct_meta}%)",
             f"- **All required fields:** {all_required} ({pct_req}%)",
             f"- **Average completeness:** {avg_score:.1f}%",
+            f"- **Documented by another spec (exempt):** {len(exempt)}",
             "",
             "## Required Fields",
             "",
@@ -551,7 +652,7 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
     )
 
     # Sort by score ascending (worst first)
-    needs_work = [r for r in reports if r.missing_required or r.missing_recommended]
+    needs_work = [r for r in scored if r.missing_required or r.missing_recommended]
     for r in sorted(needs_work, key=lambda x: x.completeness_score):
         missing_req = ", ".join(sorted(r.missing_required)) or "✓"
         missing_rec = ", ".join(sorted(r.missing_recommended)) or "✓"
@@ -570,10 +671,25 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
     )
 
     complete = [
-        r for r in reports if not r.missing_required and not r.missing_recommended
+        r for r in scored if not r.missing_required and not r.missing_recommended
     ]
     for r in sorted(complete, key=lambda x: x.engine_name):
         lines.append(f"- {r.engine_name} ({r.completeness_score:.0f}%)")
+
+    lines.extend(
+        [
+            "",
+            "## Documented By Another Spec",
+            "",
+            "These specs exist for runtime support of an alternate driver or a "
+            "managed flavour of another engine. They declare "
+            "`metadata_documented_by` and are excluded from the statistics above:",
+            "",
+        ]
+    )
+
+    for r in sorted(exempt, key=lambda x: x.engine_name):
+        lines.append(f"- {r.engine_name} ({r.module}.py) → `{r.documented_by}`")
 
     lines.extend(
         [
@@ -601,12 +717,65 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
             "    }",
             "```",
             "",
+            "If the spec exists only for runtime support of an alternate driver, "
+            "and another spec's metadata already documents it, name that spec "
+            "instead:",
+            "",
+            "```python",
+            "class MyVariantEngineSpec(MyEngineSpec):",
+            '    metadata_documented_by = "MyEngineSpec"',
+            "```",
+            "",
             "See `superset/db_engine_specs/README.md` for full documentation.",
             "",
         ]
     )
 
     return "\n".join(lines)
+
+
+def run_strict_checks(reports: list[MetadataReport], check_pypi: bool = False) -> int:
+    """
+    Fail if a spec is missing required fields, carries no metadata without
+    naming the spec that documents it, or names one that cannot document it.
+    """
+    scored = [r for r in reports if not r.is_exempt]
+    bad_refs = [r for r in reports if r.documented_by_error]
+    incomplete = [r for r in scored if r.missing_required]
+    invalid_pypi = [r for r in scored if r.invalid_packages]
+
+    if bad_refs:
+        print(
+            f"\n❌ STRICT MODE: {len(bad_refs)} specs have an invalid "
+            "`metadata_documented_by`",
+            file=sys.stderr,
+        )
+        for r in bad_refs:
+            print(
+                f"   {r.class_name} ({r.module}.py): {r.documented_by_error}",
+                file=sys.stderr,
+            )
+        return 1
+
+    if incomplete:
+        print(
+            f"\n❌ STRICT MODE: {len(incomplete)} specs missing required fields",
+            file=sys.stderr,
+        )
+        for r in incomplete:
+            print(
+                f"   {r.engine_name} ({r.module}.py): missing "
+                f"{', '.join(sorted(r.missing_required))}",
+                file=sys.stderr,
+            )
+        return 1
+
+    if check_pypi and invalid_pypi:
+        msg = f"\n❌ STRICT MODE: {len(invalid_pypi)} specs have invalid packages"
+        print(msg, file=sys.stderr)
+        return 1
+
+    return 0
 
 
 def main() -> int:
@@ -643,19 +812,22 @@ def main() -> int:
     if args.check_pypi:
         print("Validating PyPI packages (this may take a moment)...", file=sys.stderr)
 
+    validate_documentation_references(specs)
     reports = [analyze_spec(spec, check_pypi=args.check_pypi) for spec in specs]
+    scored = [r for r in reports if not r.is_exempt]
 
     # Generate output
     output_text = ""
     if args.json:
         output_data = {
             "summary": {
-                "total": len(reports),
-                "with_metadata": sum(1 for r in reports if r.has_metadata),
-                "all_required": sum(1 for r in reports if not r.missing_required),
+                "total": len(scored),
+                "with_metadata": sum(1 for r in scored if r.has_metadata),
+                "all_required": sum(1 for r in scored if not r.missing_required),
                 "average_score": round(
-                    sum(r.completeness_score for r in reports) / len(reports), 1
+                    sum(r.completeness_score for r in scored) / len(scored), 1
                 ),
+                "exempt": len(reports) - len(scored),
             },
             "schema": {
                 "required": REQUIRED_FIELDS,
@@ -679,24 +851,8 @@ def main() -> int:
         else:
             print(output_text)
 
-    # In strict mode, fail if specs WITH metadata are missing required fields.
-    # Specs without metadata are intentionally internal/legacy and are allowed.
     if args.strict:
-        # Only count specs that HAVE metadata but are incomplete
-        missing_count = sum(1 for r in reports if r.has_metadata and r.missing_required)
-        invalid_pypi_count = sum(1 for r in reports if r.invalid_packages)
-
-        if missing_count > 0:
-            print(
-                f"\n❌ STRICT MODE: {missing_count} specs missing required fields",
-                file=sys.stderr,
-            )
-            return 1
-
-        if args.check_pypi and invalid_pypi_count > 0:
-            msg = f"\n❌ STRICT MODE: {invalid_pypi_count} specs have invalid packages"
-            print(msg, file=sys.stderr)
-            return 1
+        return run_strict_checks(reports, check_pypi=args.check_pypi)
 
     return 0
 

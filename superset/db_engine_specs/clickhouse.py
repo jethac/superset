@@ -194,17 +194,19 @@ class ClickHouseBaseEngineSpec(BaseEngineSpec):
 
 
 class ClickHouseEngineSpec(ClickHouseBaseEngineSpec):
-    """Engine spec for clickhouse_sqlalchemy connector (legacy)"""
+    """Engine spec for clickhouse_sqlalchemy connector (legacy)
+
+    This spec exists for backwards compatibility with existing connections
+    using the clickhouse-sqlalchemy driver.
+    """
+
+    metadata_documented_by: str | None = "ClickHouseConnectEngineSpec"
 
     engine = "clickhouse"
     engine_name = "ClickHouse (sqlalchemy)"  # Internal name for legacy connector
 
     _show_functions_column = "name"
     supports_file_upload = False
-
-    # Note: Primary metadata is in ClickHouseConnectEngineSpec which consolidates
-    # both drivers. This spec exists for backwards compatibility with existing
-    # connections using the clickhouse-sqlalchemy driver.
 
     @classmethod
     def get_dbapi_exception_mapping(cls) -> dict[type[Exception], type[Exception]]:
@@ -317,6 +319,10 @@ except ImportError:  # ClickHouse Connect not installed, do nothing
 
 class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
     """Engine spec for clickhouse-connect connector (recommended)"""
+
+    # This spec carries the metadata the legacy parent spec defers to, so the
+    # inherited deferral does not apply.
+    metadata_documented_by = None
 
     engine = "clickhousedb"
     engine_name = "ClickHouse"

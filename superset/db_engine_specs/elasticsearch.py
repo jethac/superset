@@ -301,9 +301,10 @@ class ElasticSearchEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-metho
 class OpenDistroEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-method
     """OpenDistro/OpenSearch SQL engine spec.
 
-    Note: Documentation is consolidated in ElasticSearchEngineSpec.
     This spec exists for runtime support of the odelasticsearch driver.
     """
+
+    metadata_documented_by = "ElasticSearchEngineSpec"
 
     time_groupby_inline = True
     allows_joins = False

@@ -24,17 +24,18 @@ It tracks which database engine specs have complete metadata.
 
 ## Summary
 
-- **Total engine specs:** 79
-- **With metadata:** 64 (81%)
-- **All required fields:** 59 (74%)
-- **Average completeness:** 65.4%
+- **Documented engine specs:** 69
+- **With metadata:** 69 (100%)
+- **All required fields:** 69 (100%)
+- **Average completeness:** 86.5%
+- **Documented by another spec (exempt):** 11
 
 ## Required Fields
 
 These fields should be in every engine spec's `metadata` attribute:
 
 - `description` - Brief description of the database
-- `category` - DatabaseCategory constant for grouping
+- `categories` - List of DatabaseCategory constants for grouping
 - `pypi_packages` - Python packages needed for connection
 - `connection_string` - SQLAlchemy URI template
 
@@ -42,62 +43,30 @@ These fields should be in every engine spec's `metadata` attribute:
 
 | Engine | Module | Score | Missing Required | Missing Recommended |
 |--------|--------|-------|------------------|---------------------|
-| Azure Synapse | mssql.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| ClickHouse Connect (Superset) | clickhouse.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| ClickHouseBaseEngineSpec | clickhouse.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Databend | databend.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| DatabendBaseEngineSpec | databend.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Databricks | databricks.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Databricks (legacy) | databricks.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Databricks SQL Endpoint | databricks.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| DatabricksBaseEngineSpec | databricks.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| DatabricksDynamicBaseEngineSpec | databricks.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| MotherDuck | duckdb.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| PostgreSQL | postgres.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| PrestoBaseEngineSpec | presto.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Shillelagh | shillelagh.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Superset meta database | superset.py | 0% | category, connection_string, description, pypi_packages | default_port, homepage_url, logo |
-| Apache Drill | drill.py | 51% | connection_string, pypi_packages | default_port |
-| Amazon Athena | athena.py | 52% | connection_string, pypi_packages | default_port |
-| Ascend | ascend.py | 60% | ✓ | default_port, homepage_url, logo |
 | Ocient | ocient.py | 61% | ✓ | default_port, homepage_url, logo |
-| RisingWave | risingwave.py | 61% | ✓ | default_port, homepage_url, logo |
 | Arc | arc.py | 62% | ✓ | default_port, homepage_url, logo |
 | Parseable | parseable.py | 62% | ✓ | default_port, homepage_url, logo |
-| IBM Db2 | db2.py | 66% | connection_string | default_port |
-| Apache Solr | solr.py | 70% | ✓ | default_port, logo |
-| Apache Spark SQL | spark.py | 70% | ✓ | default_port, logo |
-| CockroachDB | cockroachdb.py | 71% | ✓ | default_port, logo |
-| Cloudflare D1 | d1.py | 71% | ✓ | default_port, logo |
-| IBM Db2 for i | ibmi.py | 71% | ✓ | default_port, logo |
-| Amazon DynamoDB | dynamodb.py | 72% | ✓ | default_port, logo |
-| Microsoft SQL Server | mssql.py | 76% | connection_string | ✓ |
-| Amazon Redshift | redshift.py | 77% | connection_string | ✓ |
-| Apache Hive | hive.py | 80% | ✓ | default_port |
-| Apache Impala | impala.py | 80% | ✓ | default_port |
-| Apache Kylin | kylin.py | 80% | ✓ | default_port |
-| IBM Netezza Performance Server | netezza.py | 80% | ✓ | default_port |
+| ODPS (MaxCompute) | odps.py | 74% | ✓ | default_port, logo |
+| Ascend | ascend.py | 80% | ✓ | default_port |
+| Azure Synapse | mssql.py | 80% | ✓ | default_port |
 | OceanBase | oceanbase.py | 80% | ✓ | default_port |
-| Apache Doris | doris.py | 81% | ✓ | default_port |
-| Aurora MySQL (Data API) | aurora.py | 81% | ✓ | default_port |
-| Aurora PostgreSQL (Data API) | aurora.py | 81% | ✓ | default_port |
+| Apache DataFusion | datafusion.py | 81% | ✓ | default_port |
 | SQLite | sqlite.py | 81% | ✓ | default_port |
-| Teradata | teradata.py | 81% | ✓ | default_port |
-| Apache Pinot | pinot.py | 81% | ✓ | default_port |
+| Shillelagh | shillelagh.py | 81% | ✓ | default_port |
+| Superset meta database | superset.py | 81% | ✓ | default_port |
+| Azure Data Explorer | kusto.py | 81% | ✓ | default_port |
+| Cloudflare D1 | d1.py | 81% | ✓ | default_port |
 | Dremio | dremio.py | 81% | ✓ | default_port |
-| DuckDB | duckdb.py | 81% | ✓ | default_port |
-| Exasol | exasol.py | 81% | ✓ | default_port |
-| Firebird | firebird.py | 81% | ✓ | default_port |
 | Firebolt | firebolt.py | 81% | ✓ | default_port |
 | Google Sheets | gsheets.py | 81% | ✓ | default_port |
-| KustoKQL | kusto.py | 81% | ✓ | default_port |
-| KustoSQL | kusto.py | 81% | ✓ | default_port |
-| Oracle | oracle.py | 81% | ✓ | default_port |
-| SAP HANA | hana.py | 81% | ✓ | default_port |
-| YDB | ydb.py | 81% | ✓ | default_port |
-| ClickHouse | clickhouse.py | 82% | ✓ | default_port |
+| Amazon Athena | athena.py | 82% | ✓ | default_port |
+| Amazon DynamoDB | dynamodb.py | 82% | ✓ | default_port |
+| Databricks | databricks.py | 82% | ✓ | default_port |
+| DuckDB | duckdb.py | 82% | ✓ | default_port |
+| Google Datastore | datastore.py | 82% | ✓ | default_port |
+| MotherDuck | duckdb.py | 82% | ✓ | default_port |
 | SAP Sybase | sybase.py | 82% | ✓ | default_port |
-| Databricks Interactive Cluster | databricks.py | 82% | ✓ | default_port |
+| MongoDB | mongodb.py | 82% | ✓ | default_port |
 | Google BigQuery | bigquery.py | 83% | ✓ | default_port |
 | Snowflake | snowflake.py | 83% | ✓ | default_port |
 
@@ -105,27 +74,65 @@ These fields should be in every engine spec's `metadata` attribute:
 
 These specs have all required and recommended fields:
 
-- Apache Druid (92%)
+- Amazon Redshift (92%)
+- Apache Doris (91%)
+- Apache Drill (91%)
+- Apache Druid (93%)
+- Apache Hive (90%)
+- Apache Impala (90%)
+- Apache IoTDB (91%)
+- Apache Kylin (90%)
+- Apache Phoenix (91%)
+- Apache Pinot (91%)
+- Apache Solr (90%)
+- Apache Spark SQL (90%)
+- ClickHouse (92%)
+- CockroachDB (91%)
 - Couchbase (91%)
 - CrateDB (91%)
 - Databend (91%)
 - Denodo (91%)
-- ElasticSearch (OpenDistro SQL) (91%)
-- ElasticSearch (SQL API) (91%)
+- Elasticsearch (92%)
+- Exasol (91%)
+- Firebird (91%)
 - Greenplum (91%)
 - Hologres (91%)
+- IBM Db2 (92%)
+- IBM Netezza Performance Server (90%)
 - MariaDB (91%)
+- Microsoft SQL Server (91%)
 - MonetDB (91%)
 - MySQL (92%)
+- Oracle (91%)
 - PostgreSQL (94%)
 - Presto (92%)
+- RisingWave (91%)
+- SAP HANA (91%)
 - SingleStore (91%)
-- StarRocks (91%)
+- StarRocks (92%)
 - TDengine (91%)
+- Teradata (91%)
 - TimescaleDB (92%)
 - Trino (92%)
 - Vertica (92%)
+- YDB (91%)
 - YugabyteDB (91%)
+
+## Documented By Another Spec
+
+These specs exist for runtime support of an alternate driver or a managed flavour of another engine. They declare `metadata_documented_by` and are excluded from the statistics above:
+
+- Aurora MySQL (aurora.py) → `MySQLEngineSpec`
+- Aurora MySQL (Data API) (aurora.py) → `MySQLEngineSpec`
+- Aurora PostgreSQL (aurora.py) → `PostgresEngineSpec`
+- Aurora PostgreSQL (Data API) (aurora.py) → `PostgresEngineSpec`
+- Azure Data Explorer (KQL) (kusto.py) → `KustoSqlEngineSpec`
+- ClickHouse (sqlalchemy) (clickhouse.py) → `ClickHouseConnectEngineSpec`
+- Databricks (legacy) (databricks.py) → `DatabricksPythonConnectorEngineSpec`
+- Databricks Interactive Cluster (databricks.py) → `DatabricksPythonConnectorEngineSpec`
+- Databricks SQL Endpoint (databricks.py) → `DatabricksPythonConnectorEngineSpec`
+- IBM Db2 for i (ibmi.py) → `Db2EngineSpec`
+- OpenSearch (OpenDistro) (elasticsearch.py) → `ElasticSearchEngineSpec`
 
 ## How to Fix
 
@@ -141,13 +148,20 @@ class MyEngineSpec(BaseEngineSpec):
 
     metadata = {
         "description": "Brief description of the database.",
-        "category": DatabaseCategory.TRADITIONAL_RDBMS,
+        "categories": [DatabaseCategory.TRADITIONAL_RDBMS],
         "pypi_packages": ["my-driver"],
         "connection_string": "mydb://{username}:{password}@{host}:{port}/{database}",
         "logo": "mydb.svg",
         "homepage_url": "https://mydb.example.com/",
         "default_port": 5432,
     }
+```
+
+If the spec exists only for runtime support of an alternate driver, and another spec's metadata already documents it, name that spec instead:
+
+```python
+class MyVariantEngineSpec(MyEngineSpec):
+    metadata_documented_by = "MyEngineSpec"
 ```
 
 See `superset/db_engine_specs/README.md` for full documentation.
