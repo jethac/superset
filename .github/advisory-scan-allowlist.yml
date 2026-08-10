@@ -1,0 +1,33 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Escape hatch for `.github/workflows/nightly-advisory-scan.yml`.
+#
+# Only malware-class advisories can fail that workflow, so this file only
+# affects those. An entry keeps one advisory from failing the run; the
+# advisory still appears in the digest. Every field is required:
+#
+#   - id:       advisory identifier, or any alias of it (GHSA-…, MAL-…, CVE-…)
+#     package:  package name the advisory is filed against
+#     reason:   why the repository is not exposed, in one sentence
+#     expires:  YYYY-MM-DD, after which the entry stops suppressing and the
+#               run fails again. Renewals are meant to be re-argued, not
+#               rubber-stamped.
+#
+# An advisory against a name the lockfile resolves to a local `file:` path
+# does not need an entry: the scan already reports those separately, because
+# the advisory describes registry code the repository does not install.
+
+suppressions: []

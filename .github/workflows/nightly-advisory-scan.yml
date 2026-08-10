@@ -1,0 +1,189 @@
+name: Nightly advisory scan
+
+# Answers one question every night, across every ecosystem this repository
+# ships: is anything we resolve currently known-malicious?
+#
+# Dependabot alerts are only visible to people with repository access,
+# `dependency-review.yml` only sees what a pull request changes, and FOSSA
+# reports on licences. None of them answer that question for the tree as a
+# whole on a schedule.
+#
+# The job fails on malware-class advisories only. Everything else — including
+# CRITICAL CVEs — lands in the run summary as a digest. That is deliberate: a
+# job that fails on every open advisory without an upstream fix is red for
+# reasons nobody in this repository can act on, and a permanently red
+# scheduled job gets muted. A muted alarm is worse than no alarm.
+
+on:
+  schedule:
+    # 04:00 UTC, before the working day in most contributor timezones.
+    - cron: "0 4 * * *"
+
+  # So an operator can run it on demand when an ecosystem-wide incident lands.
+  workflow_dispatch: {}
+
+  # The scan logic is only reachable through this workflow, so changes to it
+  # are exercised on the pull request that makes them.
+  pull_request:
+    paths:
+      - ".github/workflows/nightly-advisory-scan.yml"
+      - ".github/advisory-scan-allowlist.yml"
+      - "scripts/advisory_scan.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  # Pinned and checksum-verified rather than installed from a floating tag.
+  # Checksums come from the release's own osv-scanner_SHA256SUMS asset.
+  OSV_SCANNER_VERSION: "2.4.0"
+  OSV_SCANNER_SHA256: "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0"
+  REPORTS_DIR: advisory-reports
+
+jobs:
+  scan:
+    name: Scan lockfiles for advisories
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: "./superset-frontend/.nvmrc"
+
+      - name: Install scanners
+        # Versions are pinned to avoid ad-hoc, unpinned package installs.
+        # Bump deliberately when upgrading.
+        # zizmor: ignore[adhoc-packages] - pip-audit and PyYAML are tools for
+        # the scan itself, not application dependencies, and are pinned above
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORTS_DIR"
+          pip install --quiet pip-audit==2.10.1 PyYAML==6.0.3
+          curl --fail --silent --show-error --location \
+            --output /usr/local/bin/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  /usr/local/bin/osv-scanner" | sha256sum --check --strict
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+      - name: Run osv-scanner over every lockfile in the tree
+        # osv-scanner exits non-zero when it finds anything at all. Which
+        # findings matter is decided by the triage step, so the exit code is
+        # discarded here and the report is what counts.
+        run: |
+          set -uo pipefail
+          osv-scanner scan source --recursive --format json \
+            --output "$REPORTS_DIR/osv-scanner.json" . || true
+          test -s "$REPORTS_DIR/osv-scanner.json"
+
+      - name: Run npm audit against every package-lock.json
+        # `--package-lock-only` audits the resolved tree without installing it.
+        # npm audit is not redundant with osv-scanner: it reads GitHub's
+        # advisory database directly, which is where npm malware reports land
+        # first.
+        run: |
+          set -uo pipefail
+          while IFS= read -r lockfile; do
+            directory=$(dirname "$lockfile")
+            report="$PWD/$REPORTS_DIR/npm-audit-$(echo "$directory" | tr '/.' '__').json"
+            (cd "$directory" && npm audit --package-lock-only --json) > "$report" || true
+            if ! python -c 'import json,sys; json.load(open(sys.argv[1]))' "$report"; then
+              echo "::warning::npm audit produced no usable report for $directory"
+              rm -f "$report"
+            fi
+          done < <(git ls-files '*package-lock.json')
+
+      - name: Run pip-audit against every requirements file
+        # osv-scanner only recognises files literally named `requirements.txt`,
+        # so it walks past all of `requirements/`. pip-audit is what covers the
+        # Python dependencies the application actually pins.
+        #
+        # The `-e .` lines are dropped first: they are this repository's own
+        # projects, and resolving them makes pip build `mysqlclient`, which
+        # needs system headers the audit has no reason to install. Everything
+        # those editable installs pull in is pinned in the same file.
+        run: |
+          set -uo pipefail
+          for requirements in requirements/*.txt; do
+            slug=$(basename "$requirements" .txt)
+            grep -v '^-e ' "$requirements" > "$RUNNER_TEMP/${slug}.txt"
+            pip-audit --requirement "$RUNNER_TEMP/${slug}.txt" \
+              --no-deps --disable-pip --format json \
+              --output "$REPORTS_DIR/pip-audit-${slug}.json" || true
+            if [ ! -s "$REPORTS_DIR/pip-audit-${slug}.json" ]; then
+              echo "::warning::pip-audit produced no report for $requirements"
+              rm -f "$REPORTS_DIR/pip-audit-${slug}.json"
+            fi
+          done
+
+      - name: Triage findings
+        id: triage
+        run: |
+          set -uo pipefail
+          args=()
+          for report in "$REPORTS_DIR"/osv-scanner*.json; do
+            [ -f "$report" ] && args+=(--osv "$report")
+          done
+          for report in "$REPORTS_DIR"/npm-audit-*.json; do
+            [ -f "$report" ] && args+=(--npm-audit "$report")
+          done
+          for report in "$REPORTS_DIR"/pip-audit-*.json; do
+            [ -f "$report" ] && args+=(--pip-audit "$report")
+          done
+          while IFS= read -r lockfile; do
+            args+=(--npm-lockfile "$lockfile")
+          done < <(git ls-files '*package-lock.json')
+          python scripts/advisory_scan.py triage \
+            --allowlist .github/advisory-scan-allowlist.yml \
+            "${args[@]}" \
+            --digest "$REPORTS_DIR/digest.md"
+          status=$?
+          if [ -f "$REPORTS_DIR/digest.md" ]; then
+            cat "$REPORTS_DIR/digest.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+
+      - name: Report dependencies inside the cooldown window
+        # Advisory only, and never a reason to fail: a young release is a
+        # signal to look, not a defect. Same 7-day window Dependabot's
+        # `cooldown` applies to its own pull requests (.github/dependabot.yml).
+        if: always() && steps.triage.outcome != 'skipped'
+        run: |
+          set -uo pipefail
+          args=()
+          while IFS= read -r lockfile; do
+            args+=(--npm-lockfile "$lockfile")
+          done < <(git ls-files '*package-lock.json')
+          while IFS= read -r lockfile; do
+            args+=(--yarn-lockfile "$lockfile")
+          done < <(git ls-files '*yarn.lock')
+          for requirements in requirements/*.txt; do
+            args+=(--requirements "$requirements")
+          done
+          python scripts/advisory_scan.py freshness --days 7 \
+            "${args[@]}" --digest "$REPORTS_DIR/freshness.md" || true
+          if [ -f "$REPORTS_DIR/freshness.md" ]; then
+            cat "$REPORTS_DIR/freshness.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload raw scanner reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: advisory-reports
+          path: ${{ env.REPORTS_DIR }}
+          retention-days: 14
