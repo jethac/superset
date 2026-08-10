@@ -35,11 +35,12 @@ It runs three scanners over every lockfile in the repository:
 covered by `osv-scanner` alone.
 
 The lockfiles are discovered, not listed, so a new workspace lockfile is picked
-up without editing the workflow. The twelve found on `master` are
+up without editing the workflow. The nine tracked on `master` are
 `superset-frontend`, `superset-frontend/cypress-base`, `superset-websocket`,
-`superset-websocket/utils/client-ws-app`, `superset-embedded-sdk`, `docs`,
-three composite actions under `.github/actions`, and the three `requirements`
-files.
+`superset-websocket/utils/client-ws-app`, `superset-embedded-sdk`, `docs`, and
+the three `requirements` files. Discovery walks the working tree, so lockfiles
+inside the `.github/actions` submodules are scanned as well in a checkout that
+has those submodules initialised; a plain CI checkout does not.
 
 ## Where the failure line is drawn, and why
 
@@ -53,23 +54,27 @@ Everything else — every CVE, at every severity, fixed or not — is reported i
 the run summary and uploaded as an artefact, and does not fail the job.
 
 That is not a preference; it follows from what the dependency set actually
-contains. A run against `master` produced:
+contains. A run on a CI checkout produced:
 
 ```
-249 advisories across 12 lockfiles
-critical  8    (0 without an upstream fix)
-high      134  (7 without an upstream fix)
-moderate  86   (1 without an upstream fix)
-low       20   (2 without an upstream fix)
-unknown   1    (0 without an upstream fix)
+81 advisories across 9 lockfiles
+high      53  (6 without an upstream fix)
+moderate  16  (0 without an upstream fix)
+low       11  (2 without an upstream fix)
+unknown   1   (0 without an upstream fix)
 ```
 
-A gate at `critical` would be red every night for eight advisories that are
-mostly transitive dev-tooling issues (`@babel/traverse`, `minimist`,
-`json-schema`), none of which a nightly job can resolve on its own. A gate at
-`high` would add 134 more. A nightly alarm that is red for reasons nobody can
-act on gets muted within a week, and a muted alarm is worse than no alarm: it
-manufactures assurance nobody is entitled to.
+A gate at `high` would be red every night for 53 advisories, six of which have
+no upstream fixed version at all, and the rest of which are largely transitive
+dev-tooling issues (`brace-expansion`, `js-yaml`, `nanoid`, `d3-color`) that a
+nightly job cannot resolve on its own. Six unfixable findings alone are enough
+to keep the job permanently red. A nightly alarm that is red for reasons nobody
+can act on gets muted within a week, and a muted alarm is worse than no alarm:
+it manufactures assurance nobody is entitled to.
+
+The counts move as advisories are published; the shape does not. The severity
+mix has consistently been dominated by transitive findings with no action
+available to this repository.
 
 Malware is different in kind. It is rare, it is unambiguous, and the response is
 immediate and obvious: rip the package out. It is the one class where waking
