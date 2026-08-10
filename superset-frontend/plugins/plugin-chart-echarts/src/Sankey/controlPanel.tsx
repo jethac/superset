@@ -59,6 +59,20 @@ const config: ControlPanelConfig = {
             },
           },
         ],
+        [
+          {
+            name: 'color_by',
+            config: {
+              ...dndGroupByControl,
+              label: t('Color by'),
+              multi: false,
+              description: t(
+                'Optional column whose value determines the color of a node. When left empty, nodes are colored by their name. A node reached by rows with more than one distinct value is ambiguous and is colored by its name.',
+              ),
+              freeForm: false,
+            },
+          },
+        ],
         ['metric'],
         ['adhoc_filters'],
         ['row_limit'],
