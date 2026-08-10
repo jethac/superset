@@ -222,10 +222,13 @@
     "jsx-a11y/tabindex-no-positive": "error",
 
     // === TypeScript rules ===
-    "@typescript-eslint/ban-ts-comment": "off",
+    // "warn" rather than "off" so the remaining escape hatches are counted
+    // and trended. Graduate to "error" per directory via `overrides` as each
+    // directory is cleaned; a repository-wide "error" would fail the build.
+    "@typescript-eslint/ban-ts-comment": "warn",
     "@typescript-eslint/ban-types": "off",
     "@typescript-eslint/no-empty-function": "off",
-    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-use-before-define": "error",
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/explicit-function-return-type": "off",
