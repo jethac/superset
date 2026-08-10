@@ -41,7 +41,7 @@ export default function transformProps(
   const refs: Refs = {};
   const { formData, height, hooks, queriesData, width, theme } = chartProps;
   const { onLegendStateChanged } = hooks;
-  const { colorScheme, metric, source, target, sliceId } = formData;
+  const { colorScheme, metric, source, target, sliceId, colorBy } = formData;
   const { data } = queriesData[0];
   const colorFn = CategoricalColorNamespace.getScale(colorScheme);
   const metricLabel = getMetricLabel(metric);
@@ -50,12 +50,25 @@ export default function transformProps(
 
   const links: Link[] = [];
   const set = new Set<string>();
+  // maps a node name to the value driving its categorical color; the first row
+  // mentioning a node wins, so later differing values are ignored
+  const colorKeys = new Map<string, string>();
+  const colorByLabel = colorBy ? getColumnLabel(colorBy) : undefined;
   data.forEach(datum => {
     const sourceName = String(datum[getColumnLabel(source)]);
     const targetName = String(datum[getColumnLabel(target)]);
     const value = datum[metricLabel] as number;
     set.add(sourceName);
     set.add(targetName);
+    if (colorByLabel !== undefined) {
+      const colorKey = String(datum[colorByLabel]);
+      if (!colorKeys.has(sourceName)) {
+        colorKeys.set(sourceName, colorKey);
+      }
+      if (!colorKeys.has(targetName)) {
+        colorKeys.set(targetName, colorKey);
+      }
+    }
     links.push({
       source: sourceName,
       target: targetName,
@@ -68,7 +81,7 @@ export default function transformProps(
   ).map(name => ({
     name,
     itemStyle: {
-      color: colorFn(name, sliceId),
+      color: colorFn(colorKeys.get(name) ?? name, sliceId),
     },
     label: {
       color: theme.colorText,

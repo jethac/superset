@@ -20,8 +20,15 @@ import { buildQueryContext, QueryFormOrderBy } from '@superset-ui/core';
 import { SankeyFormData } from './types';
 
 export default function buildQuery(formData: SankeyFormData) {
-  const { metric, sort_by_metric, source, target, row_limit } = formData;
-  const groupby = [source, target];
+  const {
+    metric,
+    sort_by_metric,
+    source,
+    target,
+    row_limit,
+    color_by: colorBy,
+  } = formData;
+  const groupby = colorBy ? [source, target, colorBy] : [source, target];
   const orderby: QueryFormOrderBy[] = [];
   const shouldApplyOrderBy =
     row_limit !== undefined && row_limit !== null && row_limit !== 0;

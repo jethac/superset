@@ -59,6 +59,24 @@ const config: ControlPanelConfig = {
             },
           },
         ],
+        [
+          {
+            name: 'color_by',
+            config: {
+              ...dndGroupByControl,
+              label: t('Color by'),
+              multi: false,
+              default: null,
+              description: t(
+                'Optional column whose value drives the categorical color of ' +
+                  'the nodes it appears on. When a node appears with more than ' +
+                  'one value, the first one in the query results is used. ' +
+                  'When left empty, nodes are colored by their own name.',
+              ),
+              freeForm: false,
+            },
+          },
+        ],
         ['metric'],
         ['adhoc_filters'],
         ['row_limit'],

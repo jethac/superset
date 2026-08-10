@@ -28,6 +28,10 @@ export type SankeyFormData = QueryFormData & {
   metric: QueryFormMetric;
   source: QueryFormColumn;
   target: QueryFormColumn;
+  /** Raw form data key, as produced by the `color_by` control */
+  color_by?: QueryFormColumn;
+  /** Camel-cased counterpart of `color_by`, as exposed on `ChartProps` */
+  colorBy?: QueryFormColumn;
 };
 
 export interface SankeyChartProps extends BaseChartProps<SankeyFormData> {
