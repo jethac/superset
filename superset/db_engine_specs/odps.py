@@ -32,7 +32,11 @@ from superset.databases.utils import (
     get_foreign_keys_metadata,
     get_indexes_metadata,
 )
-from superset.db_engine_specs.base import BaseEngineSpec, BasicParametersMixin
+from superset.db_engine_specs.base import (
+    BaseEngineSpec,
+    BasicParametersMixin,
+    DatabaseCategory,
+)
 from superset.sql.parse import Partition, SQLScript, Table
 from superset.superset_typing import ResultSetColumnType
 
@@ -64,6 +68,38 @@ class OdpsEngineSpec(BasicParametersMixin, OdpsBaseEngineSpec):
     engine = "odps"
     engine_name = "ODPS (MaxCompute)"
     default_driver = "odps"
+
+    metadata = {
+        "description": (
+            "MaxCompute (formerly ODPS) is Alibaba Cloud's fully managed data "
+            "warehouse for large-scale batch analytics. PyODPS ships the "
+            "SQLAlchemy dialect that Superset connects through."
+        ),
+        "homepage_url": "https://www.alibabacloud.com/product/maxcompute",
+        "categories": [
+            DatabaseCategory.CLOUD_DATA_WAREHOUSES,
+            DatabaseCategory.ANALYTICAL_DATABASES,
+            DatabaseCategory.PROPRIETARY,
+        ],
+        "pypi_packages": ["pyodps"],
+        "connection_string": (
+            "odps://{access_key_id}:{access_key_secret}@{project}/?endpoint={endpoint}"
+        ),
+        "parameters": {
+            "access_key_id": "AccessKey ID of the Alibaba Cloud account",
+            "access_key_secret": "AccessKey secret paired with the AccessKey ID",
+            "project": "MaxCompute project name (not the DataWorks workspace name)",
+            "endpoint": "MaxCompute service endpoint for the project's region",
+        },
+        "sqlalchemy_docs_url": (
+            "https://pyodps.readthedocs.io/en/latest/db-sqlalchemy.html"
+        ),
+        "notes": (
+            "The dialect reads the project from the host component of the URI and "
+            "the credentials from its user info, so no port is involved: the "
+            "region is selected by the `endpoint` query parameter."
+        ),
+    }
 
     @classmethod
     def get_table_metadata(

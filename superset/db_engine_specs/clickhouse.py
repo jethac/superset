@@ -202,9 +202,35 @@ class ClickHouseEngineSpec(ClickHouseBaseEngineSpec):
     _show_functions_column = "name"
     supports_file_upload = False
 
-    # Note: Primary metadata is in ClickHouseConnectEngineSpec which consolidates
-    # both drivers. This spec exists for backwards compatibility with existing
-    # connections using the clickhouse-sqlalchemy driver.
+    metadata = {
+        "description": (
+            "ClickHouse is an open-source column-oriented database for real-time "
+            "analytics using SQL. This spec drives the clickhouse-sqlalchemy "
+            "dialect, which talks to the server's HTTP interface."
+        ),
+        "logo": "clickhouse.png",
+        "homepage_url": "https://clickhouse.com/",
+        "categories": [
+            DatabaseCategory.ANALYTICAL_DATABASES,
+            DatabaseCategory.OPEN_SOURCE,
+        ],
+        "pypi_packages": ["clickhouse-sqlalchemy"],
+        "connection_string": (
+            "clickhouse://{username}:{password}@{host}:{port}/{database}"
+        ),
+        "default_port": 8123,
+        "sqlalchemy_docs_url": (
+            "https://clickhouse-sqlalchemy.readthedocs.io/en/latest/connection.html"
+        ),
+        "notes": (
+            "Omitting the driver from a `clickhouse://` URI selects the dialect's "
+            "HTTP driver, whose port defaults to 8123; the native (TCP) driver is "
+            "reached with `clickhouse+native://` on port 9000. ClickHouse "
+            "deployments are better served by the clickhouse-connect driver "
+            "documented under the `clickhousedb` engine — this spec covers "
+            "connections that already use clickhouse-sqlalchemy."
+        ),
+    }
 
     @classmethod
     def get_dbapi_exception_mapping(cls) -> dict[type[Exception], type[Exception]]:

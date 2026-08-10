@@ -688,6 +688,22 @@ The linter checks for:
 - **Required fields**: description, category, pypi_packages, connection_string
 - **Recommended fields**: logo, homepage_url, default_port
 
+Two rules decide what the linter expects of a class:
+
+- **Only connectable specs are linted.** A spec has to declare both a non-empty
+  `engine` and an `engine_name` before Superset can offer it as a database to
+  connect to. Shared base classes such as `PostgresBaseEngineSpec` and
+  `PrestoBaseEngineSpec` declare neither, document nothing on their own behalf,
+  and are listed as exempt rather than scored.
+- **Inherited metadata counts.** `metadata` is an ordinary class attribute, so a
+  spec that does not declare one serves its nearest ancestor's — that is the
+  value `lib.py` reads when generating documentation, and the linter resolves it
+  the same way. Declare `metadata` on a spec when the inherited value would
+  describe the wrong product.
+
+`--strict` (which runs as a pre-commit hook) fails when a connectable spec
+cannot resolve every required field.
+
 See [METADATA_STATUS.md](METADATA_STATUS.md) for the current completeness report.
 
 ### PostgreSQL-Compatible Databases

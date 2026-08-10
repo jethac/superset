@@ -34,6 +34,12 @@ The script categorizes metadata fields into:
 - RECOMMENDED: Should be present for good documentation
 - OPTIONAL: Nice to have but not critical
 
+Only specs that can back a database connection are linted: a class needs both a
+non-empty ``engine`` and an ``engine_name`` to be offered as a database, so the
+shared base classes that have neither are reported as exempt instead. Because
+``metadata`` is an ordinary class attribute, a spec that declares none serves
+its nearest ancestor's, and the linter resolves it the same way.
+
 Example output:
     === Metadata Completeness Report ===
 
@@ -145,12 +151,14 @@ class MetadataReport:
     completeness_score: float  # 0-100
     invalid_packages: list[str] | None = None  # PyPI packages that don't exist
     limitations: list[str] | None = None  # Known limitations
+    inherited_from: str | None = None  # Ancestor class declaring the metadata
 
     def to_dict(self) -> dict[str, Any]:
         result = {
             "engine_name": self.engine_name,
             "module": self.module,
             "has_metadata": self.has_metadata,
+            "inherited_from": self.inherited_from,
             "present_fields": sorted(self.present_fields),
             "missing_required": sorted(self.missing_required),
             "missing_recommended": sorted(self.missing_recommended),
@@ -216,26 +224,26 @@ def analyze_spec(spec_data: dict[str, Any], check_pypi: bool = False) -> Metadat
         completeness_score=round(score, 1),
         invalid_packages=invalid_packages,
         limitations=limitations,
+        inherited_from=spec_data.get("inherited_from"),
     )
 
 
-def get_all_engine_specs_ast() -> list[dict[str, Any]]:  # noqa: C901
+def _parse_class_defs() -> dict[str, dict[str, Any]]:  # noqa: C901
     """
-    Discover all DB engine specs using AST parsing.
+    Collect one entry per class defined in the ``db_engine_specs`` package.
 
-    This avoids needing to initialize the Flask app.
-    Returns a list of dicts with engine_name, module, and metadata.
+    Every class is collected, including the shared base classes, because the
+    ``metadata`` attribute is inherited: resolving a spec's effective metadata
+    requires walking its base classes.
     """
     import ast
     import os
 
-    specs = []
+    classes: dict[str, dict[str, Any]] = {}
     db_engine_specs_dir = os.path.dirname(__file__)
 
-    for filename in os.listdir(db_engine_specs_dir):
+    for filename in sorted(os.listdir(db_engine_specs_dir)):
         if not filename.endswith(".py"):
-            continue
-        if filename in ("__init__.py", "base.py", "lint_metadata.py", "lib.py"):
             continue
 
         filepath = os.path.join(db_engine_specs_dir, filename)
@@ -245,71 +253,144 @@ def get_all_engine_specs_ast() -> list[dict[str, Any]]:  # noqa: C901
 
             tree = ast.parse(content)
 
-            # Find all class definitions that inherit from *EngineSpec
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ClassDef):
                     continue
 
-                # Check if it looks like an engine spec class
-                is_engine_spec = any(
-                    "EngineSpec" in ast.unparse(base)
-                    if hasattr(ast, "unparse")
-                    else True
-                    for base in node.bases
-                )
-
-                if not is_engine_spec:
-                    continue
-
-                # Skip mixins
-                if "Mixin" in node.name:
-                    continue
-
-                # Check for engine attribute with non-empty value to distinguish
-                # true base classes from product classes like OceanBaseEngineSpec
-                has_non_empty_engine = False
-                for item in node.body:
-                    if isinstance(item, ast.Assign):
-                        for target in item.targets:
-                            if isinstance(target, ast.Name) and target.id == "engine":
-                                # Check if engine value is non-empty string
-                                if isinstance(item.value, ast.Constant):
-                                    has_non_empty_engine = bool(item.value.value)
-                                break
-
-                # Skip true base classes (no engine or empty engine attribute)
-                if node.name.endswith("BaseEngineSpec") and not has_non_empty_engine:
-                    continue
-
-                # Extract engine_name and metadata
-                engine_name = node.name
-                metadata = {}
+                bases = [
+                    name
+                    for name in (_base_name(base) for base in node.bases)
+                    if name is not None
+                ]
+                engine: str | None = None
+                engine_name: str | None = None
+                metadata: dict[str, Any] = {}
 
                 for item in node.body:
-                    if isinstance(item, ast.Assign):
-                        for target in item.targets:
-                            if isinstance(target, ast.Name):
-                                if target.id == "engine_name":
-                                    if isinstance(item.value, ast.Constant):
-                                        engine_name = item.value.value
-                                elif target.id == "metadata":
-                                    try:
-                                        metadata = _eval_ast_dict(item.value)
-                                    except Exception:
-                                        # Mark as unparseable
-                                        metadata = {"_unparseable": True}
+                    if not isinstance(item, ast.Assign):
+                        continue
+                    for target in item.targets:
+                        if not isinstance(target, ast.Name):
+                            continue
+                        if target.id == "engine":
+                            if isinstance(item.value, ast.Constant):
+                                engine = item.value.value
+                        elif target.id == "engine_name":
+                            if isinstance(item.value, ast.Constant):
+                                engine_name = item.value.value
+                        elif target.id == "metadata":
+                            try:
+                                metadata = _eval_ast_dict(item.value)
+                            except Exception:
+                                # Mark as unparseable
+                                metadata = {"_unparseable": True}
 
-                specs.append(
-                    {
-                        "class_name": node.name,
-                        "engine_name": engine_name,
-                        "module": filename[:-3],  # Remove .py
-                        "metadata": metadata,
-                    }
-                )
+                classes[node.name] = {
+                    "class_name": node.name,
+                    "engine_name": engine_name,
+                    "module": filename[:-3],  # Remove .py
+                    "bases": bases,
+                    "engine": engine,
+                    "metadata": metadata,
+                    "is_engine_spec": any("EngineSpec" in base for base in bases),
+                }
 
         except Exception as e:
             print(f"Warning: Could not parse {filename}: {e}", file=sys.stderr)
+
+    return classes
+
+
+def _base_name(node: Any) -> str | None:
+    """Return the name of a base class as written in the class definition."""
+    import ast
+
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def is_connectable(class_info: dict[str, Any]) -> bool:
+    """
+    Return whether a spec class can back a database connection.
+
+    A spec is only reachable from the UI when it binds to a SQLAlchemy backend
+    through a non-empty ``engine`` and labels itself with an ``engine_name``;
+    ``superset.db_engine_specs.lib`` uses the same ``engine`` test when it
+    decides which spec is authoritative for a name. Classes that declare an
+    empty ``engine`` (``PostgresBaseEngineSpec``) or no ``engine_name`` at all
+    (``PrestoBaseEngineSpec``) exist to share behaviour with their subclasses,
+    are never offered as a database to connect to, and therefore have nothing
+    to document. A class that declares an ``engine_name`` while inheriting its
+    ``engine`` is treated as connectable, so an unusual spec is reported rather
+    than silently exempted.
+    """
+    return bool(class_info["engine"]) and bool(class_info["engine_name"])
+
+
+def resolve_metadata(
+    class_name: str, classes: dict[str, dict[str, Any]]
+) -> tuple[dict[str, Any], str | None]:
+    """
+    Resolve the ``metadata`` a spec class exposes at runtime.
+
+    ``metadata`` is a plain class attribute, so a spec that does not declare one
+    serves its nearest ancestor's — which is the value
+    ``superset.db_engine_specs.lib`` reads when it generates documentation.
+    Returns the metadata along with the class that declares it, or ``None`` when
+    no class in the hierarchy declares a non-empty value.
+    """
+    queue = [class_name]
+    seen: set[str] = set()
+
+    while queue:
+        name = queue.pop(0)
+        if name in seen or name not in classes:
+            continue
+        seen.add(name)
+        class_info = classes[name]
+        if class_info["metadata"]:
+            return class_info["metadata"], name
+        queue.extend(class_info["bases"])
+
+    return {}, None
+
+
+def get_all_engine_specs_ast() -> list[dict[str, Any]]:
+    """
+    Discover all DB engine specs using AST parsing.
+
+    This avoids needing to initialize the Flask app. Returns a list of dicts
+    with engine_name, module, metadata (resolved through the class hierarchy),
+    and whether the spec can back a database connection.
+    """
+    excluded_modules = ("__init__", "base", "lint_metadata", "lib")
+    classes = _parse_class_defs()
+    specs = []
+
+    for class_info in classes.values():
+        if not class_info["is_engine_spec"]:
+            continue
+        if "Mixin" in class_info["class_name"]:
+            continue
+        if class_info["module"] in excluded_modules:
+            continue
+
+        metadata, declared_by = resolve_metadata(class_info["class_name"], classes)
+        specs.append(
+            {
+                "class_name": class_info["class_name"],
+                "engine_name": class_info["engine_name"] or class_info["class_name"],
+                "module": class_info["module"],
+                "metadata": metadata,
+                "inherited_from": (
+                    declared_by if declared_by != class_info["class_name"] else None
+                ),
+                "connectable": is_connectable(class_info),
+            }
+        )
 
     return sorted(specs, key=lambda s: s["engine_name"])
 
@@ -383,7 +464,11 @@ def get_all_engine_specs() -> list[type]:
     return sorted(specs, key=lambda s: getattr(s, "engine_name", s.__name__))
 
 
-def print_report(reports: list[MetadataReport], verbose: bool = False) -> None:  # noqa: C901
+def print_report(  # noqa: C901
+    reports: list[MetadataReport],
+    verbose: bool = False,
+    exempt: list[dict[str, Any]] | None = None,
+) -> None:
     """Print a human-readable report."""
     print("\n" + "=" * 60)
     print("METADATA COMPLETENESS REPORT")
@@ -401,6 +486,8 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
         f"All required fields:    {fully_complete} ({fully_complete * 100 // total}%)"
     )
     print(f"Average completeness:   {avg_score:.1f}%")
+    if exempt:
+        print(f"Exempt base classes:    {len(exempt)}")
     print()
 
     # Group by completeness
@@ -438,6 +525,25 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
         print("-" * 50)
         for r in no_metadata:
             print(f"  {r.engine_name} ({r.module}.py)")
+
+    inherited = [r for r in reports if r.inherited_from]
+    if inherited:
+        print(
+            f"\n🧬 INHERITED ({len(inherited)} specs - metadata declared by an "
+            "ancestor):"
+        )
+        print("-" * 50)
+        for r in sorted(inherited, key=lambda x: x.engine_name):
+            print(f"  {r.engine_name:30} ← {r.inherited_from}")
+
+    if exempt:
+        print(
+            f"\n➖ EXEMPT ({len(exempt)} base classes - no engine/engine_name, so "
+            "never offered as a connection):"
+        )
+        print("-" * 50)
+        for spec in sorted(exempt, key=lambda s: str(s["class_name"])):
+            print(f"  {spec['class_name']} ({spec['module']}.py)")
 
     # Show invalid PyPI packages
     invalid_pypi = [r for r in reports if r.invalid_packages]
@@ -484,7 +590,9 @@ def print_report(reports: list[MetadataReport], verbose: bool = False) -> None: 
             print(f"  {field:25} {bar} {count:3}/{total} ({pct}%)")
 
 
-def generate_markdown_report(reports: list[MetadataReport]) -> str:
+def generate_markdown_report(
+    reports: list[MetadataReport], exempt: list[dict[str, Any]] | None = None
+) -> str:
     """Generate a markdown report suitable for checking into the repo."""
     lines = [
         "<!--",
@@ -529,6 +637,7 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
             f"- **With metadata:** {with_metadata} ({pct_meta}%)",
             f"- **All required fields:** {all_required} ({pct_req}%)",
             f"- **Average completeness:** {avg_score:.1f}%",
+            f"- **Exempt base classes:** {len(exempt or [])}",
             "",
             "## Required Fields",
             "",
@@ -575,6 +684,35 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
     for r in sorted(complete, key=lambda x: x.engine_name):
         lines.append(f"- {r.engine_name} ({r.completeness_score:.0f}%)")
 
+    inherited = [r for r in reports if r.inherited_from]
+    if inherited:
+        lines.extend(
+            [
+                "",
+                "## Specs Inheriting Metadata",
+                "",
+                "`metadata` is a class attribute, so these specs serve the metadata "
+                "declared by an ancestor:",
+                "",
+            ]
+        )
+        for r in sorted(inherited, key=lambda x: x.engine_name):
+            lines.append(f"- {r.engine_name} ← `{r.inherited_from}`")
+
+    if exempt:
+        lines.extend(
+            [
+                "",
+                "## Exempt Base Classes",
+                "",
+                "These classes declare no `engine` or no `engine_name`, so they are "
+                "never offered as a database to connect to and carry no metadata:",
+                "",
+            ]
+        )
+        for spec in sorted(exempt, key=lambda s: str(s["class_name"])):
+            lines.append(f"- `{spec['class_name']}` ({spec['module']}.py)")
+
     lines.extend(
         [
             "",
@@ -609,6 +747,39 @@ def generate_markdown_report(reports: list[MetadataReport]) -> str:
     return "\n".join(lines)
 
 
+def check_strict(reports: list[MetadataReport], check_pypi: bool = False) -> int:
+    """
+    Return a process exit code for strict mode.
+
+    Every spec that can back a database connection must resolve all required
+    fields, whether it declares them itself or inherits them from an ancestor.
+    Base classes that cannot back a connection are not reported at all.
+    """
+    incomplete = [r for r in reports if r.missing_required]
+    if incomplete:
+        print(
+            f"\n❌ STRICT MODE: {len(incomplete)} specs missing required fields",
+            file=sys.stderr,
+        )
+        for report in sorted(incomplete, key=lambda r: r.engine_name):
+            fields = ", ".join(sorted(report.missing_required))
+            print(
+                f"  {report.engine_name} ({report.module}.py): {fields}",
+                file=sys.stderr,
+            )
+        return 1
+
+    invalid_pypi_count = sum(1 for r in reports if r.invalid_packages)
+    if check_pypi and invalid_pypi_count > 0:
+        print(
+            f"\n❌ STRICT MODE: {invalid_pypi_count} specs have invalid packages",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Lint DB engine spec metadata for completeness"
@@ -634,7 +805,9 @@ def main() -> int:
     args = parser.parse_args()
 
     # Use AST parsing to avoid Flask app dependency
-    specs = get_all_engine_specs_ast()
+    all_specs = get_all_engine_specs_ast()
+    specs = [spec for spec in all_specs if spec["connectable"]]
+    exempt = [spec for spec in all_specs if not spec["connectable"]]
 
     if not specs:
         print("Error: No engine specs found.", file=sys.stderr)
@@ -663,12 +836,16 @@ def main() -> int:
                 "optional": OPTIONAL_FIELDS,
             },
             "reports": [r.to_dict() for r in reports],
+            "exempt": [
+                {"class_name": spec["class_name"], "module": spec["module"]}
+                for spec in exempt
+            ],
         }
         output_text = json.dumps(output_data, indent=2)
     elif args.markdown:
-        output_text = generate_markdown_report(reports)
+        output_text = generate_markdown_report(reports, exempt)
     else:
-        print_report(reports, verbose=args.verbose)
+        print_report(reports, verbose=args.verbose, exempt=exempt)
 
     # Write to file or stdout
     if output_text:
@@ -679,24 +856,8 @@ def main() -> int:
         else:
             print(output_text)
 
-    # In strict mode, fail if specs WITH metadata are missing required fields.
-    # Specs without metadata are intentionally internal/legacy and are allowed.
     if args.strict:
-        # Only count specs that HAVE metadata but are incomplete
-        missing_count = sum(1 for r in reports if r.has_metadata and r.missing_required)
-        invalid_pypi_count = sum(1 for r in reports if r.invalid_packages)
-
-        if missing_count > 0:
-            print(
-                f"\n❌ STRICT MODE: {missing_count} specs missing required fields",
-                file=sys.stderr,
-            )
-            return 1
-
-        if args.check_pypi and invalid_pypi_count > 0:
-            msg = f"\n❌ STRICT MODE: {invalid_pypi_count} specs have invalid packages"
-            print(msg, file=sys.stderr)
-            return 1
+        return check_strict(reports, check_pypi=args.check_pypi)
 
     return 0
 

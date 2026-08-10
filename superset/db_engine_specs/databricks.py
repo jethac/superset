@@ -298,9 +298,31 @@ class DatabricksODBCEngineSpec(DatabricksBaseEngineSpec):
     drivers = {"pyodbc": "ODBC driver for SQL endpoint"}
     default_driver = "pyodbc"
 
-    # Note: Primary metadata is in DatabricksPythonConnectorEngineSpec which
-    # consolidates all Databricks connection methods. This spec exists for
-    # backwards compatibility with ODBC connections to SQL Endpoints.
+    metadata = {
+        "description": (
+            "Databricks is a unified analytics platform built on Apache Spark. "
+            "This spec reaches a SQL warehouse through the Databricks ODBC "
+            "driver rather than the Python connector."
+        ),
+        "logo": "databricks.png",
+        "homepage_url": "https://www.databricks.com/",
+        "categories": [
+            DatabaseCategory.CLOUD_DATA_WAREHOUSES,
+            DatabaseCategory.ANALYTICAL_DATABASES,
+            DatabaseCategory.HOSTED_OPEN_SOURCE,
+        ],
+        "pypi_packages": ["pyodbc"],
+        "connection_string": (
+            "databricks+pyodbc://token:{access_token}@{host}:{port}/{database}"
+        ),
+        "default_port": 443,
+        "notes": (
+            "Besides `pyodbc`, this driver needs the Databricks ODBC driver "
+            "installed on the host, and the warehouse's HTTP path supplied "
+            "through the connection's engine parameters. New connections are "
+            "better served by the `databricks` Python connector spec."
+        ),
+    }
 
 
 class DatabricksDynamicBaseEngineSpec(BasicParametersMixin, DatabricksBaseEngineSpec):
@@ -624,9 +646,31 @@ class DatabricksNativeEngineSpec(DatabricksDynamicBaseEngineSpec):
         "databricks+connector://token:{access_token}@{host}:{port}/{database_name}"
     )
 
-    # Note: Primary metadata is in DatabricksPythonConnectorEngineSpec which
-    # consolidates all Databricks connection methods. This spec exists for
-    # backwards compatibility with legacy databricks-dbapi connections.
+    metadata = {
+        "description": (
+            "Databricks is a unified analytics platform built on Apache Spark. "
+            "This spec connects through the `databricks-dbapi` connector, which "
+            "predates the official Databricks Python connector."
+        ),
+        "logo": "databricks.png",
+        "homepage_url": "https://www.databricks.com/",
+        "categories": [
+            DatabaseCategory.CLOUD_DATA_WAREHOUSES,
+            DatabaseCategory.ANALYTICAL_DATABASES,
+            DatabaseCategory.HOSTED_OPEN_SOURCE,
+        ],
+        "pypi_packages": ["databricks-dbapi[sqlalchemy]"],
+        "connection_string": (
+            "databricks+connector://token:{access_token}@{host}:{port}/{database_name}"
+        ),
+        "default_port": 443,
+        "notes": (
+            "The token is passed as the URI password and the workspace hostname "
+            "as its host. New connections are better served by the `databricks` "
+            "Python connector spec."
+        ),
+    }
+
     context_key_mapping = {
         **DatabricksDynamicBaseEngineSpec.context_key_mapping,
         "database": "database",
