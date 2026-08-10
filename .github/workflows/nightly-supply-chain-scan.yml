@@ -1,0 +1,112 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# Nightly advisory scan across every lockfile in the repository.
+#
+# The job fails only on malware-class advisories. Everything else, including
+# advisories with no upstream fix and dependencies inside the release cooldown
+# window, lands in the run summary as a digest. See
+# scripts/README-supply-chain-scan.md for why the gate is drawn there.
+name: Nightly supply-chain scan
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [synchronize, opened, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/nightly-supply-chain-scan.yml"
+      - "scripts/supply_chain_scan.py"
+      - "tests/unit_tests/scripts/supply_chain_scan_test.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  OSV_SCANNER_VERSION: v2.5.0
+  OSV_SCANNER_SHA256: edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c
+
+jobs:
+  scan:
+    name: Scan all lockfiles
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: "./superset-frontend/.nvmrc"
+
+      # pip-audit's resolver requires 3.11 or newer.
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # pip-audit resolves each pinned requirement through pip, and mysqlclient
+      # publishes no wheel, so its metadata build needs the MySQL headers.
+      - name: Install MySQL client headers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config default-libmysqlclient-dev
+
+      - name: Install pip-audit
+        run: pip install "pip-audit==2.10.1"
+
+      - name: Install osv-scanner
+        run: |
+          set -euo pipefail
+          url="https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          curl -sSfL "$url" -o /tmp/osv-scanner
+          echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum --check --strict
+          chmod +x /tmp/osv-scanner
+
+      - name: Run the scan
+        id: scan
+        run: |
+          python scripts/supply_chain_scan.py \
+            --osv-scanner-binary /tmp/osv-scanner \
+            --digest "${RUNNER_TEMP}/digest.md" \
+            --json "${RUNNER_TEMP}/findings.json"
+
+      - name: Publish digest
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/digest.md" ]; then
+            cat "${RUNNER_TEMP}/digest.md" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "The scan produced no digest." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: supply-chain-scan
+          path: |
+            ${{ runner.temp }}/digest.md
+            ${{ runner.temp }}/findings.json
+          retention-days: 30
