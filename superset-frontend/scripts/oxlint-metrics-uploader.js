@@ -77,13 +77,27 @@ async function runOxlintAndProcess() {
   };
 
   try {
-    // Run OXC with JSON format
+    // Run OXC with JSON format.
+    //
+    // `--config oxlint.json` is required: the project's config is not named
+    // `.oxlintrc.json`, so a bare invocation silently measures oxlint's default
+    // ruleset instead of the project's. `--quiet` is deliberately absent, unlike
+    // the developer-facing `lint` script — most rules in oxlint.json are
+    // warn-level, and --quiet would drop every one of them from the metric.
+    //
+    // Consequence: this metric counts far more diagnostics than a bare, quiet
+    // oxlint run does (1470 against 92 under oxlint 1.76.0). The one-time step
+    // in the tracked series at the commit that added these flags describes the
+    // instrument, not a change in the codebase.
     console.log('Running OXC linter...');
-    const oxlintOutput = execSync('npx oxlint --format json', {
-      encoding: 'utf8',
-      maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
-      stdio: ['pipe', 'pipe', 'ignore'], // Ignore stderr to avoid error output
-    });
+    const oxlintOutput = execSync(
+      'npx oxlint --config oxlint.json --format json',
+      {
+        encoding: 'utf8',
+        maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
+        stdio: ['pipe', 'pipe', 'ignore'], // Ignore stderr to avoid error output
+      },
+    );
 
     const results = JSON.parse(oxlintOutput);
 
