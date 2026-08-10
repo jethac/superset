@@ -68,14 +68,14 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 # postgres 17.10-alpine3.24
         env:
           POSTGRES_USER: superset
           POSTGRES_PASSWORD: superset
         ports:
           - 15432:5432
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 # redis 7.4.10-alpine
         ports:
           - 16379:6379
     steps:

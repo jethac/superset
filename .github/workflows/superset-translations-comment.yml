@@ -15,12 +15,17 @@ on:
 # All data comes from the artifact uploaded by the Translations workflow.
 
 permissions:
-  pull-requests: write
-  actions: read
+  contents: read
 
 jobs:
   post-comment:
     runs-on: ubuntu-26.04
+    # `actions: read` downloads the artifact from the triggering run;
+    # `pull-requests: write` posts/updates the regression comment.
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
     # Only act when the Translations workflow failed (which means a regression
     # was detected — the workflow exits 1 on regression).
     if: github.event.workflow_run.conclusion == 'failure'
