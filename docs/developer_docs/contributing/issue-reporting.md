@@ -323,48 +323,44 @@ Send to: security@apache.org
 
 ### Status Labels
 
-- `needs-triage`: Awaiting review
-- `confirmed`: Bug confirmed
-- `in-progress`: Being worked on
-- `blocked`: Blocked by dependency
-- `stale`: No activity for 30+ days
+- `inactive`: Applied by an inactivity bot that is no longer running. Existing
+  issues still carry it; nothing applies it to new issues.
+
+There are no `needs-triage`, `confirmed`, `in-progress` or `blocked` labels in
+this repository. Use issue comments and GitHub assignment to signal status.
 
 ## Issue Lifecycle
+
+There is no automated lifecycle. Nothing labels an issue on creation, and
+nothing moves it between states.
 
 ### 1. Creation
 
 - User creates issue with template
-- Auto-labeled as `needs-triage`
 
 ### 2. Triage
 
-- Maintainer reviews within 7 days
-- Labels applied (priority, type, component)
+- A maintainer reads the issue and applies labels (priority, type, component)
 - Questions asked if needed
+- There is no service-level commitment on how long this takes
 
-### 3. Confirmation
+### 3. Development
 
-- Bug reproduced or feature discussed
-- Label changed to `confirmed`
-- Assigned to milestone if applicable
-
-### 4. Development
-
-- Contributor claims issue
-- Label changed to `in-progress`
+- Contributor claims the issue in a comment or by self-assigning
 - PR linked to issue
 
-### 5. Resolution
+### 4. Resolution
 
 - PR merged
-- Issue auto-closed
+- Issue closed automatically if the PR says `Fixes #nnn`
 - Or manually closed with explanation
 
 ## Following Up
 
 ### If No Response
 
-After 7 days without response:
+Issues are triaged by volunteers, and an issue can sit untouched
+indefinitely. If yours has, a nudge is reasonable:
 
 ```markdown
 @apache/superset-committers This issue hasn't been triaged yet.
@@ -380,9 +376,10 @@ Here's additional debugging information: [details]
 
 ### Issue Staleness
 
-- Bot marks stale after 30 days of inactivity
-- Closes after 7 more days without activity
-- To keep open: Comment with updates
+No bot marks issues stale or closes them for inactivity. `.github/stale.yml`
+is still in the repository, but it configures probot/stale, which is not
+installed; no workflow replaces it. An inactive issue stays open until a human
+closes it.
 
 ## Tips for Success
 
