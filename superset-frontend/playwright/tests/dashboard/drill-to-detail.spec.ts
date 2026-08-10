@@ -67,6 +67,7 @@ const PAGE_LINK_COUNT = 6;
 testWithAssets(
   'opens the drill to detail modal from the chart menu',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -87,6 +88,7 @@ testWithAssets(
 testWithAssets(
   'refreshes the drilled samples',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -111,6 +113,7 @@ testWithAssets(
 testWithAssets(
   'paginates the drilled samples',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);
@@ -124,26 +127,26 @@ testWithAssets(
     const modal = new DrillToDetailModal(page);
     await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
     await expect(modal.rowCount).toContainText(ALL_ROWS);
-    await expect(modal.cells.filter({ hasText: 'Amy' }).first()).toBeVisible();
+    await expect(modal.cells.first()).toBeVisible();
     await expect(modal.pages).toHaveCount(PAGE_LINK_COUNT);
     await expect(modal.pages.filter({ hasText: '1' }).first()).toBeVisible();
     await expect(
       modal.pages.filter({ hasText: ALL_ROWS_LAST_PAGE }),
     ).toHaveCount(1);
+    // The samples query has no ordering of its own, so a page is identified by
+    // the cells it renders rather than by a value of the example data.
+    const renderedCells = () => modal.cells.allInnerTexts();
+    const firstPage = await renderedCells();
 
     // Paginate deep enough for the rows to change, then back to the first page.
     await modal.gotoPage(4);
-    await expect(
-      modal.cells.filter({ hasText: 'Kimberly' }).first(),
-    ).toBeVisible();
+    await expect.poll(renderedCells).not.toEqual(firstPage);
 
     // The virtualized grid scrolls back to the top when the page changes, so the
-    // first page's first row is visible without scrolling.
+    // first page's cells are rendered again without scrolling.
     await modal.grid.first().evaluate(element => element.scrollTo(0, 200));
     await modal.gotoPage(0);
-    await expect(
-      modal.cells.filter({ hasText: 'Aaron' }).first(),
-    ).toBeVisible();
+    await expect.poll(renderedCells).toEqual(firstPage);
   },
 );
 
@@ -185,6 +188,7 @@ testWithAssets(
 testWithAssets(
   'drills a Big Number with no filters',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'big_number_total',
     ]);

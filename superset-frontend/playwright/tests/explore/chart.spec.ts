@@ -108,15 +108,23 @@ async function saveChartToDashboard(
     response => response.url().includes('/api/v1/explore/'),
     { timeout: TIMEOUT.API_RESPONSE },
   );
+  // Toasts fade out on their own, so both are awaited from the moment the save
+  // starts rather than one after the other.
+  const toasts = Promise.all(
+    [
+      `was added to dashboard [${dashboardName}]`,
+      `Chart [${chartName}] has been overwritten`,
+    ].map(text =>
+      page
+        .getByText(text)
+        .first()
+        .waitFor({ state: 'visible', timeout: TIMEOUT.API_RESPONSE * 2 }),
+    ),
+  );
   await page.locator('[data-test="btn-modal-save"]').click();
 
   await expect(modal).toBeHidden({ timeout: TIMEOUT.API_RESPONSE });
-  await expect(
-    page.getByText(`was added to dashboard [${dashboardName}]`),
-  ).toBeVisible({ timeout: TIMEOUT.API_RESPONSE });
-  await expect(
-    page.getByText(`Chart [${chartName}] has been overwritten`),
-  ).toBeVisible({ timeout: TIMEOUT.API_RESPONSE });
+  await toasts;
   await expect(saveButton).toBeEnabled({ timeout: TIMEOUT.API_RESPONSE });
   await exploreRefetched;
 }

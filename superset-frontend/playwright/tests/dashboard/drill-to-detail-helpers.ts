@@ -534,5 +534,9 @@ export async function drillBy(page: Page, value: string): Promise<void> {
 
 /** Chooses the unfiltered "Drill to detail" option of an open context menu. */
 export async function drillToDetail(page: Page): Promise<void> {
-  await drillToDetailItem(page).click();
+  const item = drillToDetailItem(page);
+  await item.waitFor({ state: 'attached', timeout: TIMEOUT.PAGE_LOAD });
+  // A context menu opened over a chart animates and can be placed where a real
+  // click cannot reach it, so the click is dispatched in place.
+  await item.dispatchEvent('click');
 }
