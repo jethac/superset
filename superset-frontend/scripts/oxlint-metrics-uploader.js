@@ -52,6 +52,36 @@ async function writeToGoogleSheet(data, range, headers, append = false) {
   await sheets.spreadsheets.values[method](request);
 }
 
+// oxlint reports every rule as `plugin(rule)`, including core rules as
+// `eslint(rule)`. The tech-debt sheet predates the ESLint to OXC migration and
+// keys rules by their ESLint spelling, so codes are translated back to
+// `plugin/rule` (and core rules to a bare `rule`) to keep each series
+// continuous across the migration.
+const PLUGIN_ALIASES = {
+  // oxlint's `typescript` plugin is the `@typescript-eslint` ESLint plugin.
+  typescript: '@typescript-eslint',
+};
+
+function normalizeRuleId(code) {
+  if (!code) {
+    return 'unknown';
+  }
+
+  // `eslint-plugin-unicorn(...)` is also accepted: older oxlint releases
+  // prefixed plugin names that way.
+  const match = code.match(/^(?:eslint-plugin-)?([\w-]+)\(([^)]+)\)$/);
+  if (!match) {
+    return code;
+  }
+
+  const [, plugin, rule] = match;
+  if (plugin === 'eslint') {
+    return rule;
+  }
+
+  return `${PLUGIN_ALIASES[plugin] || plugin}/${rule}`;
+}
+
 // Run OXC and get JSON output
 async function runOxlintAndProcess() {
   const enrichedRules = {
@@ -82,7 +112,9 @@ async function runOxlintAndProcess() {
     // `oxlint.json` is not the `.oxlintrc.json` oxlint auto-discovers, so the
     // config has to be passed explicitly or the run reports oxlint's defaults
     // instead of the project's ruleset. Matches the `lint` scripts in
-    // package.json.
+    // package.json, except for `--quiet`: the developer-facing `lint` script
+    // suppresses warnings to reduce noise, but most of the tracked debt is
+    // warn-level, so the measurement path has to see all of it.
     const oxlintOutput = execSync(
       'npx oxlint --config oxlint.json --format json',
       {
@@ -101,17 +133,7 @@ async function runOxlintAndProcess() {
     // OXC JSON format has diagnostics array
     if (results.diagnostics && Array.isArray(results.diagnostics)) {
       results.diagnostics.forEach(diagnostic => {
-        // Extract rule ID from code like "eslint(no-unused-vars)" or "eslint-plugin-unicorn(no-new-array)"
-        const codeMatch = diagnostic.code?.match(
-          /^(?:eslint(?:-plugin-(\w+))?\()([^)]+)\)$/,
-        );
-        let ruleId = diagnostic.code || 'unknown';
-
-        if (codeMatch) {
-          const plugin = codeMatch[1];
-          const rule = codeMatch[2];
-          ruleId = plugin ? `${plugin}/${rule}` : rule;
-        }
+        const ruleId = normalizeRuleId(diagnostic.code);
 
         const file = diagnostic.filename || 'unknown';
         const line = diagnostic.labels?.[0]?.span?.line || 0;
@@ -230,6 +252,14 @@ async function runOxlintAndProcess() {
     console.log(
       `Found ${Object.keys(metricsByRule).length} unique rules with ${occurrencesData.length} total occurrences`,
     );
+
+    // Log the aggregate so a run is auditable from its own output, without
+    // reading back the spreadsheet.
+    Object.entries(metricsByRule)
+      .sort(([, a], [, b]) => b.count - a.count)
+      .forEach(([rule, { count }]) => {
+        console.log(`  ${String(count).padStart(6)}  ${rule}`);
+      });
 
     await writeToGoogleSheet(
       metricsData,
