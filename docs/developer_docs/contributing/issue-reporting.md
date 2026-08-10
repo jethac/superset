@@ -306,55 +306,49 @@ Send to: security@apache.org
 
 ### Type Labels
 
-- `bug`: Something isn't working
-- `feature`: New feature request
-- `enhancement`: Improvement to existing feature
-- `documentation`: Documentation improvements
-- `question`: Question about usage
+- `#bug`: Something isn't working, with more specific variants such as `#bug:regression`,
+  `#bug:performance` and `#bug:cosmetic`
+- `feature-request`: New feature request
+- `enhancement:request`: Improvement to an existing feature
+- `doc`: Documentation improvements, with `doc:user` and `doc:developer` variants
+- `question & help wanted`: Question about usage
 
 ### Component Labels
 
-- `dashboard`: Dashboard functionality
-- `sqllab`: SQL Lab
-- `explore`: Chart builder
-- `visualization`: Chart types
-- `api`: REST API
-- `security`: Security related
+Component labels are hierarchical, with a broad label and colon-separated refinements:
+
+- `dashboard`: Dashboard functionality (e.g. `dashboard:native-filters`, `dashboard:export`)
+- `sqllab`: SQL Lab (e.g. `sqllab:editor`, `sqllab:query:history`)
+- `explore`: Chart builder (e.g. `explore:control`, `explore:metrics`)
+- `viz:charts`: Chart types (e.g. `viz:charts:echarts`, `viz:charts:bignumber`)
+- `api`: REST API (e.g. `api:charts`, `api:dashboard`)
+
+Browse the full list on the [repository's labels
+page](https://github.com/apache/superset/labels) rather than guessing at a name.
 
 ### Status Labels
 
-- `needs-triage`: Awaiting review
-- `confirmed`: Bug confirmed
-- `in-progress`: Being worked on
-- `blocked`: Blocked by dependency
-- `stale`: No activity for 30+ days
+- `inactive`: Marked as inactive by maintainers
 
 ## Issue Lifecycle
 
 ### 1. Creation
 
 - User creates issue with template
-- Auto-labeled as `needs-triage`
+- The bug report template applies the `#bug` label automatically; other labels are applied by
+  maintainers
 
 ### 2. Triage
 
-- Maintainer reviews within 7 days
-- Labels applied (priority, type, component)
+- A maintainer reviews the issue and applies labels (priority, type, component)
 - Questions asked if needed
 
-### 3. Confirmation
+### 3. Development
 
-- Bug reproduced or feature discussed
-- Label changed to `confirmed`
-- Assigned to milestone if applicable
-
-### 4. Development
-
-- Contributor claims issue
-- Label changed to `in-progress`
+- Contributor claims the issue by commenting on it
 - PR linked to issue
 
-### 5. Resolution
+### 4. Resolution
 
 - PR merged
 - Issue auto-closed
@@ -364,7 +358,8 @@ Send to: security@apache.org
 
 ### If No Response
 
-After 7 days without response:
+Triage is best-effort by volunteers, and there is no guaranteed response time. If an issue has
+sat untouched for a while, a polite nudge helps:
 
 ```markdown
 @apache/superset-committers This issue hasn't been triaged yet.
@@ -380,9 +375,10 @@ Here's additional debugging information: [details]
 
 ### Issue Staleness
 
-- Bot marks stale after 30 days of inactivity
-- Closes after 7 more days without activity
-- To keep open: Comment with updates
+No bot marks or closes inactive issues. A `.github/stale.yml` file remains in the repository
+from when the probot/stale app was in use, but that app is no longer installed, so its settings
+have no effect and issues are not auto-closed for inactivity. Old issues are triaged and closed
+by maintainers by hand.
 
 ## Tips for Success
 

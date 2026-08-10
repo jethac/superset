@@ -17,7 +17,27 @@
  * under the License.
  */
 const zlib = require('zlib');
-const { ZSTDDecompress } = require('simple-zstd');
+
+// simple-zstd shells out to the system zstd binary and throws on import when it
+// is missing, which aborts every webpack command with an error that does not say
+// what to install.
+let ZSTDDecompress;
+try {
+  ({ ZSTDDecompress } = require('simple-zstd'));
+} catch (error) {
+  throw new Error(
+    [
+      'The webpack config needs the system `zstd` binary, which is a prerequisite ' +
+        'separate from `npm ci` (simple-zstd shells out to it to decode zstd-compressed ' +
+        'backend responses in the dev proxy).',
+      'Install it and retry:',
+      '  macOS:         brew install zstd',
+      '  Debian/Ubuntu: sudo apt-get install zstd',
+      '  Fedora/RHEL:   sudo dnf install zstd',
+      `Underlying error: ${error.message}`,
+    ].join('\n'),
+  );
+}
 
 const yargs = require('yargs');
 const { hideBin } = require('yargs/helpers');
