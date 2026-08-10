@@ -267,8 +267,14 @@ do is to install our dev, pinned python requirements bundle, after installing
 the prerequisites mentioned in [OS Dependencies](https://superset.apache.org/docs/installation/pypi/#os-dependencies)
 
 ```bash
-pip install -r requirements/development.txt
+pip install --require-hashes -r requirements/development.txt
+pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 ```
+
+The pinned requirements carry artifact hashes, so `--require-hashes` verifies
+that each downloaded artifact is the exact one the pins were compiled against.
+The packages living in this repository are installed from local paths, which
+have no artifact to hash, so they are installed in a second step.
 
 ### Git Hooks
 
@@ -393,11 +399,11 @@ Ensure that you are using Python version 3.11 or 3.12, then proceed with:
 python3 -m venv venv # setup a python3 virtualenv
 source venv/bin/activate
 
-# Install external dependencies
-pip install -r requirements/development.txt
+# Install external dependencies, verifying the artifact hashes in the lockfile
+pip install --require-hashes -r requirements/development.txt
 
-# Install Superset in editable (development) mode
-pip install -e .
+# Install the packages in this repository in editable (development) mode
+pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 
 # Initialize the database
 superset db upgrade
@@ -448,7 +454,7 @@ If you add a new requirement or update an existing requirement (per the `install
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-python3 -m pip install -r requirements/development.txt
+python3 -m pip install --require-hashes -r requirements/development.txt
 ./scripts/uv-pip-compile.sh
 ```
 
@@ -668,7 +674,7 @@ The current status of the usability of each flag (stable vs testing, etc) can be
 Superset uses Git pre-commit hooks courtesy of [pre-commit](https://pre-commit.com/). To install run the following:
 
 ```bash
-pip3 install -r requirements/development.txt
+pip3 install --require-hashes -r requirements/development.txt
 pre-commit install
 ```
 

@@ -647,8 +647,8 @@ deactivate
 rm -rf venv
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements/development.txt
-pip install -e .
+pip install --require-hashes -r requirements/development.txt
+pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 ```
 
 ### Database Issues

@@ -54,12 +54,22 @@ runs:
 
           pip install --upgrade pip setuptools wheel uv
 
+          # The pinned requirements carry artifact hashes, so they install under
+          # --require-hashes. The repo's own packages resolve from local paths,
+          # which have no artifact to hash, so they are installed separately and
+          # without re-resolving dependencies (--no-deps), which would otherwise
+          # reintroduce an unhashed resolution.
+          NO_DEPS=""
           if [ "$INPUT_REQUIREMENTS_TYPE" = "dev" ]; then
-            uv pip install --system -r requirements/development.txt
+            uv pip install --system --require-hashes -r requirements/development.txt
+            uv pip install --system --no-deps -e ./superset-core -e ./superset-extensions-cli
+            NO_DEPS="--no-deps"
           elif [ "$INPUT_REQUIREMENTS_TYPE" = "base" ]; then
-            uv pip install --system -r requirements/base.txt
+            uv pip install --system --require-hashes -r requirements/base.txt
+            uv pip install --system --no-deps -e ./superset-core
+            NO_DEPS="--no-deps"
           fi
 
-          uv pip install --system -e .
+          uv pip install --system $NO_DEPS -e .
         fi
       shell: bash

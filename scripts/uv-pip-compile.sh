@@ -64,17 +64,58 @@ fi
 
 ADDITIONAL_ARGS="$@"
 
-# Generate the requirements/base.txt file
-uv pip compile pyproject.toml requirements/base.in -o requirements/base.txt $ADDITIONAL_ARGS
+# Pins are emitted with `--hash` entries so that every install can run under
+# `--require-hashes`, which pins the artifact and not merely the version.
+#
+# The repo's own packages are installed from local paths in editable mode, and a
+# local path has no artifact to hash. They are therefore left out of the
+# generated files entirely (rather than emitted unhashed, which
+# `--require-hashes` rejects) and installed explicitly by every install path,
+# alongside the hashed requirements file.
+COMMON_ARGS=(
+  --generate-hashes
+  --no-emit-package apache-superset
+  --no-emit-package apache-superset-core
+  --no-emit-package apache-superset-extensions-cli
+)
 
-# Hack to remove "Unnamed requirements are not allowed as constraints" error from base requirements
-grep --invert-match "./superset-core" requirements/base.txt > requirements/base-constraint.txt
+# Generate the requirements/base.txt file
+uv pip compile pyproject.toml requirements/base.in -o requirements/base.txt "${COMMON_ARGS[@]}" $ADDITIONAL_ARGS
+
+# Constraints files cannot carry hashes, so reduce base.txt to bare `name==version` lines
+grep --extended-regexp '^[a-zA-Z0-9]' requirements/base.txt | sed 's/ *\\$//' > requirements/base-constraint.txt
 
 # Generate the requirements/development.txt file, making sure the base requirements are used as a constraint to keep the versions in sync. Note that `development.txt` is a Superset of `base.txt` where version for the shared libs should match their version.
-uv pip compile requirements/development.in -c requirements/base-constraint.txt -o requirements/development.txt $ADDITIONAL_ARGS
+uv pip compile requirements/development.in -c requirements/base-constraint.txt -o requirements/development.txt "${COMMON_ARGS[@]}" $ADDITIONAL_ARGS
+
+# NOTE translation is intended as a "supplemental" set of pins that can be combined with either base or dev as needed
+uv pip compile requirements/translations.in -o requirements/translations.txt "${COMMON_ARGS[@]}" $ADDITIONAL_ARGS
+
+# The Docker images layer database driver extras and Playwright on top of an
+# image that already has base.txt installed. Those installs need pins too, so
+# each gets a supplemental file holding only what base.txt does not already
+# provide, constrained to the base versions.
+# The exclusion list is passed as a uv config file rather than a few hundred
+# `--no-emit-package` flags, to keep the command recorded in the generated
+# file's header readable and stable across dependency changes.
+{
+  echo "[pip]"
+  echo "no-emit-package = ["
+  sed 's/[=<>;[ ].*//' requirements/base-constraint.txt | sed 's/.*/  "&",/'
+  echo "]"
+} > requirements/base-exclusions.toml
+
+for extra in duckdb postgres; do
+  uv --config-file requirements/base-exclusions.toml \
+    pip compile "requirements/${extra}.in" -c requirements/base-constraint.txt \
+    -o "requirements/${extra}.txt" "${COMMON_ARGS[@]}" $ADDITIONAL_ARGS
+done
+
+rm requirements/base-exclusions.toml
+
+# Playwright is installed into the common image layer, before base.txt, so its
+# pins are standalone rather than a delta against base.txt.
+uv pip compile requirements/playwright.in -o requirements/playwright.txt "${COMMON_ARGS[@]}" $ADDITIONAL_ARGS
 
 # Remove temporary base requirement file
 rm requirements/base-constraint.txt
-
-# NOTE translation is intended as a "supplemental" set of pins that can be combined with either base or dev as needed
-uv pip compile requirements/translations.in -o requirements/translations.txt $ADDITIONAL_ARGS
