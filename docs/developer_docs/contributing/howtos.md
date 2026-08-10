@@ -166,11 +166,7 @@ npm run test -- MyComponent.test.tsx
 
 ### E2E Integration Testing
 
-We support both Playwright (recommended) and Cypress for end-to-end testing.
-
-#### Playwright (Recommended - NEW)
-
-Playwright is our new E2E testing framework, gradually replacing Cypress.
+We use Playwright for end-to-end testing.
 
 ```bash
 # Navigate to frontend directory
@@ -197,30 +193,6 @@ npm run playwright:debug tests/auth/login.spec.ts
 
 # Generate test report
 npm run playwright:report
-```
-
-#### Cypress (DEPRECATED - will be removed)
-
-Cypress is being phased out in favor of Playwright but is still available:
-
-```bash
-# Set base URL for Cypress
-export CYPRESS_BASE_URL='http://localhost:8088'
-export CYPRESS_DATABASE=test
-export CYPRESS_USERNAME=admin
-export CYPRESS_PASSWORD=admin
-
-# Navigate to Cypress directory
-cd superset-frontend/cypress-base
-
-# Run interactively
-npm run cypress-debug
-
-# Run headless (like CI)
-npm run cypress-run-chrome
-
-# Run specific file
-npm run cypress-run-chrome -- --spec "cypress/e2e/dashboard/dashboard.test.ts"
 ```
 
 ### Debugging Server App
