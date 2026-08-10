@@ -315,7 +315,14 @@ def local_npm_packages(document: Any) -> set[str]:
             continue
         name = path.split("node_modules/")[-1]
         resolved = str(entry.get("resolved", ""))
-        is_local = bool(entry.get("link")) or not resolved.startswith("https://")
+        # A link, a `file:` specifier, or a bare relative path. Anything
+        # carrying a URL scheme came from a registry, including a private
+        # one, and stays subject to the gate.
+        is_local = (
+            bool(entry.get("link"))
+            or resolved.startswith("file:")
+            or bool(resolved and "://" not in resolved)
+        )
         entries.setdefault(name, []).append(is_local)
     return {name for name, flags in entries.items() if all(flags)}
 
