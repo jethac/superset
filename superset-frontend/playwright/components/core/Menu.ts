@@ -96,16 +96,49 @@ export class Menu {
     itemText: string,
     options?: { timeout?: number },
   ): Promise<void> {
+    const popup = await this.openSubmenu(submenuText, itemText, options);
+
+    // Use dispatchEvent instead of click to bypass viewport and pointer interception
+    // issues. Ant Design renders submenu popups in a portal that can be positioned
+    // outside the viewport or behind chart content (e.g., large tables with z-index).
+    await popup.getByText(itemText, { exact: true }).dispatchEvent('click');
+  }
+
+  /**
+   * Opens a submenu and returns its popup without selecting anything.
+   *
+   * For assertions about a submenu's contents, and for submenus that hold
+   * controls rather than items (the "On dashboards" submenu embeds a search
+   * box). {@link selectSubmenuItem} is the one to use when the goal is a click.
+   *
+   * The popup is identified by an item it is expected to contain, because Ant
+   * Design renders every open submenu into the same portal — filtering on
+   * content is what distinguishes them.
+   *
+   * @param submenuText - The text of the submenu to open (e.g., "On dashboards")
+   * @param expectedItemText - Text the popup is expected to contain
+   * @param options - Optional timeout settings
+   * @returns Locator for the submenu popup
+   */
+  async openSubmenu(
+    submenuText: string,
+    expectedItemText: string,
+    options?: { timeout?: number },
+  ): Promise<Locator> {
     const timeout = options?.timeout ?? TIMEOUT.FORM_LOAD;
 
     // Try hover first (most natural user interaction)
-    let popup = await this.openSubmenuWithHover(submenuText, itemText, timeout);
+    let popup = await this.openSubmenuWithHover(
+      submenuText,
+      expectedItemText,
+      timeout,
+    );
 
     // Fallback to keyboard navigation
     if (!popup) {
       popup = await this.openSubmenuWithKeyboard(
         submenuText,
-        itemText,
+        expectedItemText,
         timeout,
       );
     }
@@ -114,7 +147,7 @@ export class Menu {
     if (!popup) {
       popup = await this.openSubmenuWithDispatchEvent(
         submenuText,
-        itemText,
+        expectedItemText,
         timeout,
       );
     }
@@ -125,10 +158,7 @@ export class Menu {
       );
     }
 
-    // Use dispatchEvent instead of click to bypass viewport and pointer interception
-    // issues. Ant Design renders submenu popups in a portal that can be positioned
-    // outside the viewport or behind chart content (e.g., large tables with z-index).
-    await popup.getByText(itemText, { exact: true }).dispatchEvent('click');
+    return popup;
   }
 
   /**

@@ -20,6 +20,7 @@
 import { Page, Locator } from '@playwright/test';
 import { TIMEOUT } from '../utils/constants';
 import { AgGrid } from '../components/core/AgGrid';
+import { Menu, Select } from '../components/core';
 
 /**
  * Explore Page object
@@ -36,7 +37,18 @@ export class ExplorePage {
     EXPAND_DATA_PANEL: '[aria-label="Expand data panel"]',
     RESULTS_TAB: '[data-node-key="results"]',
     ACTIVE_TABPANE: '.ant-tabs-content-active',
+    METADATA_BAR: '[data-test="metadata-bar"]',
+    ACTIONS_TRIGGER: '[data-test="actions-trigger"]',
+    // The additional-actions menu is rendered into an unlabelled portal, so the
+    // open dropdown is the only handle on it.
+    OPEN_DROPDOWN: '.ant-dropdown:not(.ant-dropdown-hidden)',
+    SAVE_BUTTON: '[data-test="query-save-button"]',
+    SAVE_MODAL_BODY: '[data-test="save-modal-body"]',
+    SAVE_MODAL_CONFIRM: '[data-test="btn-modal-save"]',
   } as const;
+
+  /** Label of the submenu listing the dashboards a chart has been added to. */
+  private static readonly DASHBOARDS_SUBMENU = 'On dashboards';
 
   constructor(page: Page) {
     this.page = page;
@@ -151,5 +163,80 @@ export class ExplorePage {
       .locator('[role="grid"]')
       .first();
     return new AgGrid(this.page, grid);
+  }
+
+  /**
+   * The metadata bar under the chart title, which summarises dashboard
+   * membership, last modification and authorship.
+   */
+  getMetadataBar(): Locator {
+    return this.page.locator(ExplorePage.SELECTORS.METADATA_BAR);
+  }
+
+  /**
+   * Opens the additional-actions dropdown in the Explore header.
+   */
+  async openActionsMenu(): Promise<void> {
+    await this.page.locator(ExplorePage.SELECTORS.ACTIONS_TRIGGER).click();
+    await this.page
+      .locator(ExplorePage.SELECTORS.OPEN_DROPDOWN)
+      .first()
+      .waitFor({ state: 'visible' });
+  }
+
+  /**
+   * Closes the additional-actions dropdown by clicking its trigger again.
+   */
+  async closeActionsMenu(): Promise<void> {
+    await this.page.locator(ExplorePage.SELECTORS.ACTIONS_TRIGGER).click();
+    await this.page
+      .locator(ExplorePage.SELECTORS.OPEN_DROPDOWN)
+      .first()
+      .waitFor({ state: 'hidden' });
+  }
+
+  /**
+   * Opens the additional-actions menu and hovers its "On dashboards" submenu.
+   *
+   * @param expectedItemText - Text the submenu is expected to contain, used to
+   * identify the popup among any other open ones
+   * @returns Locator for the submenu popup
+   */
+  async openDashboardsSubmenu(expectedItemText: string): Promise<Locator> {
+    await this.openActionsMenu();
+    const menu = new Menu(this.page, ExplorePage.SELECTORS.OPEN_DROPDOWN);
+    return menu.openSubmenu(ExplorePage.DASHBOARDS_SUBMENU, expectedItemText, {
+      timeout: TIMEOUT.UI_TRANSITION,
+    });
+  }
+
+  /**
+   * Saves the current chart onto an existing dashboard, overwriting the chart.
+   *
+   * Returns once the save modal has closed; the save is complete when the chart
+   * PUT resolves, which callers await alongside this call.
+   *
+   * @param dashboardName - Title of the dashboard to add the chart to
+   */
+  async saveChartToDashboard(dashboardName: string): Promise<void> {
+    const saveButton = this.page.locator(ExplorePage.SELECTORS.SAVE_BUTTON);
+    await saveButton.click();
+
+    const modalBody = this.page.locator(ExplorePage.SELECTORS.SAVE_MODAL_BODY);
+    await modalBody.waitFor({ state: 'visible' });
+
+    const dashboardSelect = Select.fromRole(this.page, 'Select a dashboard');
+    await dashboardSelect.selectOption(dashboardName);
+
+    await this.page.locator(ExplorePage.SELECTORS.SAVE_MODAL_CONFIRM).click();
+    await modalBody.waitFor({ state: 'detached' });
+  }
+
+  /**
+   * The Explore header's save button, whose enabled state tracks whether the
+   * chart has unsaved changes.
+   */
+  getSaveButton(): Locator {
+    return this.page.locator(ExplorePage.SELECTORS.SAVE_BUTTON);
   }
 }
