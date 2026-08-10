@@ -90,10 +90,16 @@ async function saveChartToDashboard(
   // Explore re-renders as it settles, which discards an open modal, so the
   // modal is filled in as a unit and reopened if it was discarded.
   await expect(async () => {
-    if (!(await modal.isVisible())) {
+    if (!(await dashboardSelect.isVisible())) {
+      // A modal left over from a discarded render keeps its own stale form, so
+      // it is dismissed rather than reused.
+      if (await modal.isVisible()) {
+        await page.keyboard.press('Escape');
+        await expect(modal).toBeHidden({ timeout: 5000 });
+      }
       await saveButton.click();
+      await expect(dashboardSelect).toBeVisible({ timeout: 5000 });
     }
-    await expect(dashboardSelect).toBeVisible({ timeout: 5000 });
     await dashboardSelect.click({ force: true, timeout: 5000 });
     await dashboardSelect.fill(dashboardName, { timeout: 5000 });
     // The option's title holds the full name, which distinguishes dashboards
