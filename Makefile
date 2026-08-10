@@ -26,11 +26,13 @@ superset:
 	# Bootstrap uv (the project's installer) into the active environment
 	pip install uv
 
-	# Install external dependencies
-	uv pip install -r requirements/development.txt
+	# Install external dependencies, verifying the artifact hashes in the lockfile
+	uv pip install --require-hashes -r requirements/development.txt
 
-	# Install Superset in editable (development) mode
-	uv pip install -e .
+	# Install the local packages in editable (development) mode. They resolve from
+	# local paths, which have no artifact to hash, so they are installed apart from
+	# the hashed requirements and without re-resolving dependencies.
+	uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 
 	# Create an admin user in your metadata database
 	superset fab create-admin \
@@ -58,11 +60,11 @@ update-py:
 	# Bootstrap uv (the project's installer) into the active environment
 	pip install uv
 
-	# Install external dependencies
-	uv pip install -r requirements/development.txt
+	# Install external dependencies, verifying the artifact hashes in the lockfile
+	uv pip install --require-hashes -r requirements/development.txt
 
-	# Install Superset in editable (development) mode
-	uv pip install -e .
+	# Install the local packages in editable (development) mode
+	uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 
 	# Initialize the database
 	superset db upgrade
@@ -86,7 +88,7 @@ activate:
 pre-commit:
 	# setup pre commit dependencies
 	pip install uv
-	uv pip install -r requirements/development.txt
+	uv pip install --require-hashes -r requirements/development.txt
 	pre-commit install
 
 format: py-format js-format

@@ -137,7 +137,7 @@ ENV BUILD_TRANSLATIONS=${BUILD_TRANSLATIONS}
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/translations.txt requirements/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    . /app/.venv/bin/activate && /app/docker/pip-install.sh --requires-build-essential -r requirements/translations.txt
+    . /app/.venv/bin/activate && /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/translations.txt
 
 COPY superset/translations/ /app/translations_mo/
 RUN if [ "${BUILD_TRANSLATIONS}" = "true" ]; then \
@@ -176,9 +176,10 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 
 ARG INCLUDE_CHROMIUM="false"
 ARG INCLUDE_FIREFOX="false"
+COPY requirements/playwright.txt requirements/
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
     if [ "${INCLUDE_CHROMIUM}" = "true" ] || [ "${INCLUDE_FIREFOX}" = "true" ]; then \
-        uv pip install playwright && \
+        uv pip install --require-hashes -r requirements/playwright.txt && \
         playwright install-deps && \
         if [ "${INCLUDE_CHROMIUM}" = "true" ]; then playwright install chromium; fi && \
         if [ "${INCLUDE_FIREFOX}" = "true" ]; then playwright install firefox; fi; \
@@ -233,14 +234,16 @@ FROM python-common AS lean
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/base.txt requirements/
 
-# Copy superset-core package needed for editable install in base.txt
+# Copy superset-core package, a local path dependency of the superset package
 COPY superset-core superset-core
 
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/base.txt
-# Install the superset package
+    /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/base.txt
+# Install the local packages. They resolve from local paths, which have no
+# artifact to hash, so they are installed apart from the hashed requirements and
+# with --no-deps, which would otherwise reintroduce an unhashed resolution.
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    uv pip install -e .
+    uv pip install --no-deps -e ./superset-core -e .
 RUN python -m compileall /app/superset
 
 USER superset
@@ -265,12 +268,16 @@ COPY superset-extensions-cli superset-extensions-cli
 
 # Install Python dependencies using docker/pip-install.sh
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/development.txt
-# Install the superset package
+    /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/development.txt
+# Install the local packages, which have no artifact to hash, apart from the
+# hashed requirements and without re-resolving dependencies
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    uv pip install -e .
+    uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli -e .
 
-RUN uv pip install .[postgres]
+# The extras files hold only what base.txt does not already provide, so their
+# remaining transitive dependencies are resolved by that file rather than at
+# install time (--no-deps), which --require-hashes would otherwise reject
+RUN uv pip install --no-deps --require-hashes -r requirements/postgres.txt
 RUN python -m compileall /app/superset
 
 USER superset
@@ -280,7 +287,8 @@ USER superset
 ######################################################################
 FROM lean AS ci
 USER root
-RUN uv pip install .[postgres,duckdb]
+COPY requirements/postgres.txt requirements/duckdb.txt requirements/
+RUN uv pip install --no-deps --require-hashes -r requirements/postgres.txt -r requirements/duckdb.txt
 USER superset
 CMD ["/app/docker/entrypoints/docker-ci.sh"]
 
@@ -289,6 +297,7 @@ CMD ["/app/docker/entrypoints/docker-ci.sh"]
 ######################################################################
 FROM lean AS showtime
 USER root
-RUN uv pip install .[duckdb]
+COPY requirements/duckdb.txt requirements/
+RUN uv pip install --no-deps --require-hashes -r requirements/duckdb.txt
 USER superset
 CMD ["/app/docker/entrypoints/docker-ci.sh"]
