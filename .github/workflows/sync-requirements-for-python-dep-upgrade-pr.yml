@@ -5,14 +5,17 @@ on:
     types: [opened, synchronize]
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
   sync-python-dep-requirements:
     # This action is limited for (1) PRs authored by Dependabot and (2) upstream repo due to write back to remote
     if: github.repository == 'apache/superset' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-26.04
+    permissions:
+      # Required to push the synced requirements commit back to the
+      # Dependabot PR branch.
+      contents: write
     steps:
       - name: Fetch Dependabot metadata
         id: dependabot-metadata

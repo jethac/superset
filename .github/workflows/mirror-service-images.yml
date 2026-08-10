@@ -59,7 +59,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   mirror:
@@ -67,6 +66,11 @@ jobs:
     # apache GHCR namespace, so a scheduled run there would only ever fail.
     if: github.repository == 'apache/superset'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required to push the mirrored images into this repository's GHCR
+      # namespace with the GITHUB_TOKEN used for the ghcr.io login.
+      packages: write
     strategy:
       fail-fast: false
       matrix:
