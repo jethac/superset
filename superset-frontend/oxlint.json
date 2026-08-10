@@ -280,6 +280,20 @@
   },
   "overrides": [
     {
+      // Ratchet for the "no `any` types" refactor: these directories contain
+      // zero `no-explicit-any` violations, so enforcing the rule here costs
+      // nothing and stops them from regressing. Extend this list as other
+      // directories reach zero.
+      "files": [
+        "src/chartCustomizations/**",
+        "src/dataMask/**",
+        "src/logger/**"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "error"
+      }
+    },
+    {
       "files": [
         "plugins/plugin-chart-table/src/TableChart.tsx",
         "plugins/plugin-chart-pivot-table/src/react-pivottable/TableRenderers.tsx"
