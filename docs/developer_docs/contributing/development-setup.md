@@ -519,6 +519,54 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.0/install
 
 For those interested, you may also try out [avn](https://github.com/nvm-sh/nvm#deeper-shell-integration) to automatically switch to the node version that is required to run Superset frontend.
 
+##### zstd
+
+The webpack dev server proxies backend responses and decodes them, including `zstd`-encoded
+ones. It does that through the [`simple-zstd`](https://www.npmjs.com/package/simple-zstd)
+npm package, which shells out to the **system `zstd` binary**; `npm ci` does not install it.
+Without it, `npm run dev-server` fails while loading `webpack.config.js`:
+
+```
+[webpack-cli] Failed to load '.../superset-frontend/webpack.config.js' config
+▶ CJS (`require`) failed:
+  Can not access zstd! Is it installed?
+```
+
+Install it before starting the dev server:
+
+```bash
+# macOS
+brew install zstd
+
+# Debian/Ubuntu
+sudo apt-get install zstd
+
+# verify
+zstd --version
+```
+
+##### Memory
+
+A webpack dev build is memory-hungry. Measured on a 4 vCPU / 8 GB Ubuntu VM with nothing
+else running, `npm run dev-server` peaked at about **6.7 GB** resident across the webpack
+process and its `fork-ts-checker` type-check worker during the first compile, settling to
+about **4 GB** once type-checking finished.
+
+That leaves no room for the `docker compose` stack on an 8 GB machine: running both means
+the kernel OOM-killer terminates webpack mid-build. Plan for **16 GB** if you run the docker
+stack and a webpack dev build side by side — the same figure the
+[Codespaces machine type](#getting-started-with-codespaces) requires.
+
+If you only need a running Superset and are not editing frontend code, skip the local
+frontend build entirely and run a prebuilt image instead:
+
+```bash
+TAG=6.0.0 docker compose -f docker-compose-image-tag.yml up
+```
+
+`TAG` accepts any published version tag (or `latest`). This does not mount or rebuild local
+assets, so frontend changes will not be reflected.
+
 #### Install dependencies
 
 Install third-party dependencies listed in `package.json` via:

@@ -17,7 +17,21 @@
  * under the License.
  */
 const zlib = require('zlib');
-const { ZSTDDecompress } = require('simple-zstd');
+
+// `simple-zstd` shells out to the system `zstd` binary and throws at require
+// time when it is missing, which fails the whole webpack config load with a
+// message that doesn't say what to install.
+let ZSTDDecompress;
+try {
+  ({ ZSTDDecompress } = require('simple-zstd'));
+} catch (error) {
+  throw new Error(
+    'The webpack dev proxy requires the `zstd` command-line tool to be installed and on ' +
+      'PATH (the `simple-zstd` package shells out to it to decode zstd-encoded backend ' +
+      'responses). Install it with `brew install zstd` on macOS, `apt-get install zstd` on ' +
+      `Debian/Ubuntu, or your platform's equivalent. Original error: ${error.message}`,
+  );
+}
 
 const yargs = require('yargs');
 const { hideBin } = require('yargs/helpers');
