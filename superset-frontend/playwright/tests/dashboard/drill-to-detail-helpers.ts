@@ -481,6 +481,27 @@ export async function drillByValues(
 }
 
 /**
+ * Right-clicks an element of a chart rendered as DOM and reads the drill-by
+ * options it offers.
+ *
+ * The menu can close under the read, which the retry distinguishes from an
+ * element that offers no options at all.
+ */
+export async function drillByValuesAt(
+  page: Page,
+  target: Locator,
+): Promise<string[]> {
+  let values: string[] = [];
+  await expect(async () => {
+    await closeContextMenu(page);
+    await target.click({ button: 'right' });
+    values = await drillByValues(page, MARK_GESTURE_TIMEOUT);
+    expect(values.length).toBeGreaterThan(0);
+  }).toPass({ timeout: TIMEOUT.SLOW_TEST, intervals: [0] });
+  return values;
+}
+
+/**
  * Right-clicks a canvas chart's candidate marks, handing each mark's drill-by
  * options to `visit` until it asks to stop or the candidates run out.
  *

@@ -33,7 +33,7 @@ import {
   chartCanvas,
   drillBy,
   drillToDetail,
-  drillByValues,
+  drillByValuesAt,
   drillChartMark,
   drillMarkBy,
   drillMarkMatching,
@@ -81,7 +81,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.title).toContainText('Drill to detail:');
     await expect(modal.rowCount).toContainText(ALL_ROWS);
   },
@@ -102,7 +102,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await modal.gotoPage(PAGE_LINK_COUNT - 1);
     await expect(modal.activePage).not.toHaveText('1');
 
@@ -127,7 +127,7 @@ testWithAssets(
       .click();
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.rowCount).toContainText(ALL_ROWS);
     await expect(modal.cells.first()).toBeVisible();
     await expect(modal.pages).toHaveCount(PAGE_LINK_COUNT);
@@ -166,7 +166,7 @@ testWithAssets(
     await drillMarkBy(page, box.point, GENDERS[0]);
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.filterValues.first()).toContainText(GENDERS[0]);
     await expect(modal.rowCount).toContainText(BOY_ROWS);
     await expect(modal.pages).toHaveCount(PAGE_LINK_COUNT);
@@ -199,7 +199,7 @@ testWithAssets(
     await drillToDetail(page);
 
     const modal = new DrillToDetailModal(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.filterValues).toHaveCount(0);
   },
 );
@@ -216,7 +216,7 @@ testWithAssets(
 
     await chart.locator('.header-line').click({ button: 'right' });
     await drillToDetail(page);
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.filterValues).toHaveCount(0);
     await modal.close();
 
@@ -224,7 +224,7 @@ testWithAssets(
     // The trendline's marks carry only the time value the point aggregates.
     const year = await drillChartMark(page, chart, value => YEAR.test(value));
 
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.filterValues.first()).toContainText(year);
   },
 );
@@ -232,6 +232,7 @@ testWithAssets(
 testWithAssets(
   'drills a Table by the clicked dimension value',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, ['table']);
     const [chart] = charts;
     const modal = new DrillToDetailModal(page);
@@ -241,7 +242,7 @@ testWithAssets(
         button: 'right',
       });
       await drillBy(page, gender);
-      await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
       await expect(modal.filterValues.first()).toContainText(gender);
       await modal.close();
     }
@@ -251,6 +252,7 @@ testWithAssets(
 testWithAssets(
   'drills a Pivot Table by each dimension of the clicked cell',
   async ({ page, testAssets }) => {
+    testWithAssets.setTimeout(TIMEOUT.SLOW_TEST);
     const { charts } = await openDrillDashboard(page, testAssets, [
       'pivot_table_v2',
     ]);
@@ -260,8 +262,7 @@ testWithAssets(
 
     // A pivot cell sits at the intersection of a row and a column dimension,
     // so it offers a drill by either, or by both at once.
-    await cell.click({ button: 'right' });
-    const values = await drillByValues(page);
+    const values = await drillByValuesAt(page, cell);
     expect(values).toHaveLength(3);
     expect(values[2]).toBe('all');
     await page.keyboard.press('Escape');
@@ -269,14 +270,14 @@ testWithAssets(
     for (const value of values.slice(0, 2)) {
       await cell.click({ button: 'right' });
       await drillBy(page, value);
-      await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
       await expect(modal.filterValues.first()).toContainText(value);
       await modal.close();
     }
 
     await cell.click({ button: 'right' });
     await drillBy(page, 'all');
-    await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+    await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
     await expect(modal.filterValues).toHaveCount(2);
     // The modal groups the filters by dimension, which need not follow the
     // order the submenu listed them in.
@@ -325,17 +326,17 @@ for (const vizType of TIME_CHARTS) {
       const time = await drillMarkMatching(page, point, value =>
         YEAR.test(value),
       );
-      await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
       await expect(modal.filterValues.first()).toContainText(time);
       await modal.close();
 
       await drillMarkBy(page, point, GENDERS[0]);
-      await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
       await expect(modal.filterValues.first()).toContainText(GENDERS[0]);
       await modal.close();
 
       await drillMarkBy(page, point, 'all');
-      await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+      await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
       // The point can resolve to either of the neighbouring times, so the
       // filter is asserted to hold a time rather than one specific year.
       await expect(modal.filterValues.nth(0)).toContainText(YEAR);
@@ -373,7 +374,7 @@ for (const vizType of CATEGORICAL_CHARTS) {
       );
       for (const [index, gender] of GENDERS.entries()) {
         await drillMarkBy(page, marks[index].point, gender);
-        await modal.waitForSamples({ timeout: TIMEOUT.API_RESPONSE });
+        await modal.waitForSamples({ timeout: TIMEOUT.CHART_RENDER });
         await expect(modal.filterValues.first()).toContainText(gender);
         await modal.close();
       }
