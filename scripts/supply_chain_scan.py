@@ -47,9 +47,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 NPM_REGISTRY = "https://registry.npmjs.org"
+NPM_REGISTRY_HOSTS = frozenset({"registry.npmjs.org", "registry.yarnpkg.com"})
 PYPI_REGISTRY = "https://pypi.org/pypi"
 ABBREVIATED_PACKUMENT = "application/vnd.npm.install-v1+json"
 USER_AGENT = "superset-supply-chain-scan"
@@ -268,6 +270,20 @@ def discover_targets(repo_root: Path) -> list[Target]:
     return sorted(targets, key=lambda target: target.label)
 
 
+def is_npm_registry_url(url: str) -> bool:
+    """Whether a lockfile ``resolved`` URL is served by a public npm registry.
+
+    The host is compared exactly. A substring test would accept a tarball
+    served from an attacker-controlled host that merely embeds a registry
+    name, and treating such a package as registry-backed would let a
+    malware advisory be attributed to the wrong artefact.
+    """
+    try:
+        return urlsplit(url).hostname in NPM_REGISTRY_HOSTS
+    except ValueError:
+        return False
+
+
 def iter_yarn_resolved(lockfile: Path) -> Iterator[tuple[str, str]]:
     """Yields ``(name, version)`` for every registry package in a yarn v1 lockfile.
 
@@ -296,8 +312,8 @@ def iter_yarn_resolved(lockfile: Path) -> Iterator[tuple[str, str]]:
         if stripped.startswith("version "):
             version = stripped.split(" ", 1)[1].strip().strip('"')
         elif stripped.startswith("resolved "):
-            registry_backed = "registry.yarnpkg.com" in stripped or (
-                "registry.npmjs.org" in stripped
+            registry_backed = is_npm_registry_url(
+                stripped.split(" ", 1)[1].strip().strip('"')
             )
     if name and version and registry_backed:
         yield name, version
@@ -675,7 +691,7 @@ def iter_npm_resolved(lockfile: Path) -> Iterator[tuple[str, str]]:
         if not key or entry.get("link"):
             continue
         resolved = entry.get("resolved", "")
-        if not isinstance(resolved, str) or "registry.npmjs.org" not in resolved:
+        if not isinstance(resolved, str) or not is_npm_registry_url(resolved):
             continue
         version = entry.get("version")
         name = entry.get("name")

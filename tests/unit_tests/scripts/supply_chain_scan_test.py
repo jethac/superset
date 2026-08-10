@@ -322,6 +322,10 @@ def test_yarn_resolved_iteration_reads_scoped_and_grouped_entries(
                 '"local-thing@file:../local-thing":',
                 '  version "0.0.1"',
                 '  resolved "file:../local-thing"',
+                "",
+                "lookalike@^1.0.0:",
+                '  version "1.0.0"',
+                '  resolved "https://registry.npmjs.org.evil.test/lookalike.tgz"',
             ]
         ),
         encoding="utf-8",
@@ -331,6 +335,18 @@ def test_yarn_resolved_iteration_reads_scoped_and_grouped_entries(
         ("@scope/pkg", "1.2.3"),
         ("left-pad", "1.0.0"),
     ]
+
+
+def test_registry_url_detection_compares_the_host_exactly() -> None:
+    assert scan.is_npm_registry_url(
+        "https://registry.npmjs.org/left-pad/-/left-pad-1.0.0.tgz"
+    )
+    assert scan.is_npm_registry_url(
+        "https://registry.yarnpkg.com/left-pad/-/left-pad-1.0.0.tgz"
+    )
+    assert not scan.is_npm_registry_url("https://registry.npmjs.org.evil.test/x.tgz")
+    assert not scan.is_npm_registry_url("https://evil.test/registry.npmjs.org/x.tgz")
+    assert not scan.is_npm_registry_url("file:../local-thing")
 
 
 def test_target_discovery_covers_both_npm_lockfile_formats(tmp_path: Path) -> None:
