@@ -137,7 +137,7 @@ ENV BUILD_TRANSLATIONS=${BUILD_TRANSLATIONS}
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/translations.txt requirements/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    . /app/.venv/bin/activate && /app/docker/pip-install.sh --requires-build-essential -r requirements/translations.txt
+    . /app/.venv/bin/activate && /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/translations.txt
 
 COPY superset/translations/ /app/translations_mo/
 RUN if [ "${BUILD_TRANSLATIONS}" = "true" ]; then \
@@ -233,11 +233,16 @@ FROM python-common AS lean
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/base.txt requirements/
 
-# Copy superset-core package needed for editable install in base.txt
+# Copy superset-core package, installed from the working tree because an
+# editable has no artifact to hash and so cannot appear in a hashed pin file
 COPY superset-core superset-core
 
+# --require-hashes verifies the downloaded artifact of every pin, not just its
+# version
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/base.txt
+    /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/base.txt
+RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
+    uv pip install --no-deps -e ./superset-core
 # Install the superset package
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
     uv pip install -e .
@@ -259,13 +264,16 @@ RUN /app/docker/apt-install.sh \
 # Copy development requirements and install them
 COPY requirements/*.txt requirements/
 
-# Copy local packages needed for editable installs in development.txt
+# Copy local packages, installed from the working tree because an editable has
+# no artifact to hash and so cannot appear in a hashed pin file
 COPY superset-core superset-core
 COPY superset-extensions-cli superset-extensions-cli
 
 # Install Python dependencies using docker/pip-install.sh
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/development.txt
+    /app/docker/pip-install.sh --requires-build-essential --require-hashes -r requirements/development.txt
+RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
+    uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli
 # Install the superset package
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
     uv pip install -e .

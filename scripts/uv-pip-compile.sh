@@ -64,17 +64,31 @@ fi
 
 ADDITIONAL_ARGS="$@"
 
-# Generate the requirements/base.txt file
-uv pip compile pyproject.toml requirements/base.in -o requirements/base.txt $ADDITIONAL_ARGS
+# Emit a --hash for every pin so installs can run under --require-hashes. A
+# version pin only guarantees which version is requested; the hash is what
+# detects a replaced artifact for that same version.
+HASH_ARGS="--generate-hashes"
 
-# Hack to remove "Unnamed requirements are not allowed as constraints" error from base requirements
-grep --invert-match "./superset-core" requirements/base.txt > requirements/base-constraint.txt
+# The first-party packages in this repository are installed from the working
+# tree as editables. An editable has no artifact to hash, and --require-hashes
+# rejects any unhashed requirement, so they are kept out of the generated files
+# and installed separately by the Dockerfile and the CI setup action.
+LOCAL_ARGS="--no-emit-package apache-superset \
+  --no-emit-package apache-superset-core \
+  --no-emit-package apache-superset-extensions-cli"
+
+# Generate the requirements/base.txt file
+uv pip compile pyproject.toml requirements/base.in -o requirements/base.txt $HASH_ARGS $LOCAL_ARGS $ADDITIONAL_ARGS
+
+# Constraints files cannot carry hashes, so strip them (and the line
+# continuations they hang off) from the copy used to pin development.txt.
+sed -E '/^[[:space:]]*--hash=/d; s/[[:space:]]*\\$//' requirements/base.txt > requirements/base-constraint.txt
 
 # Generate the requirements/development.txt file, making sure the base requirements are used as a constraint to keep the versions in sync. Note that `development.txt` is a Superset of `base.txt` where version for the shared libs should match their version.
-uv pip compile requirements/development.in -c requirements/base-constraint.txt -o requirements/development.txt $ADDITIONAL_ARGS
+uv pip compile requirements/development.in -c requirements/base-constraint.txt -o requirements/development.txt $HASH_ARGS $LOCAL_ARGS $ADDITIONAL_ARGS
 
 # Remove temporary base requirement file
 rm requirements/base-constraint.txt
 
 # NOTE translation is intended as a "supplemental" set of pins that can be combined with either base or dev as needed
-uv pip compile requirements/translations.in -o requirements/translations.txt $ADDITIONAL_ARGS
+uv pip compile requirements/translations.in -o requirements/translations.txt $HASH_ARGS $LOCAL_ARGS $ADDITIONAL_ARGS

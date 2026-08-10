@@ -54,10 +54,16 @@ runs:
 
           pip install --upgrade pip setuptools wheel uv
 
+          # --require-hashes verifies the downloaded artifact of every pin,
+          # not just its version. The first-party editables are excluded from
+          # the generated files (they have no artifact to hash) and installed
+          # from the working tree below.
           if [ "$INPUT_REQUIREMENTS_TYPE" = "dev" ]; then
-            uv pip install --system -r requirements/development.txt
+            uv pip install --system --require-hashes -r requirements/development.txt
+            uv pip install --system --no-deps -e ./superset-core -e ./superset-extensions-cli
           elif [ "$INPUT_REQUIREMENTS_TYPE" = "base" ]; then
-            uv pip install --system -r requirements/base.txt
+            uv pip install --system --require-hashes -r requirements/base.txt
+            uv pip install --system --no-deps -e ./superset-core
           fi
 
           uv pip install --system -e .

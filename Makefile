@@ -27,7 +27,11 @@ superset:
 	pip install uv
 
 	# Install external dependencies
-	uv pip install -r requirements/development.txt
+	uv pip install --require-hashes -r requirements/development.txt
+
+	# Install the in-tree packages, which carry no hash and so are excluded
+	# from the pinned requirements
+	uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli
 
 	# Install Superset in editable (development) mode
 	uv pip install -e .
@@ -59,7 +63,11 @@ update-py:
 	pip install uv
 
 	# Install external dependencies
-	uv pip install -r requirements/development.txt
+	uv pip install --require-hashes -r requirements/development.txt
+
+	# Install the in-tree packages, which carry no hash and so are excluded
+	# from the pinned requirements
+	uv pip install --no-deps -e ./superset-core -e ./superset-extensions-cli
 
 	# Install Superset in editable (development) mode
 	uv pip install -e .
